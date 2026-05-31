@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Jua', 'Fredoka', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(180deg, #e0f2ff 0%, #b9e1ff 55%, #9fd3ff 100%);
+  overflow: hidden;
+  color: #0c4a6e;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * 와이드 화면(태블릿/PC) 대응: 게임 루트를 가운데 정렬된 최대폭으로 묶어
+ * 플레이 필드가 편안한 세로형(거의 정사각) 컬럼으로 유지되게 한다.
+ * 남는 양옆 여백은 body 그라데이션이 그대로 테마 레터/필러박스가 된다.
+ * (풍선은 %-좌표라 컨테이너만 좁혀도 필드가 그대로 리스케일됨)
+ */
+#root {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+  /* 와이드 화면에서 좁아진 컬럼 양옆 경계를 부드럽게 마감 */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+/*
+ * 노치/홈바 안전영역: 상단 HUD와 하단 입력 바가 시스템 UI에 가리지 않도록
+ * env(safe-area-inset-*)를 기존 패딩과 max()로 합산한다. (게임 로직과 무관)
+ */
+.fmk-safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+.fmk-safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+input,
+button {
+  font-family: inherit;
+}
+
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}

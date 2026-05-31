@@ -1,0 +1,228 @@
+/* ===================================================================
+   ForMyKids · 공통 'Storybook' 테마
+   -------------------------------------------------------------------
+   7~8세 아이들을 위한 통합 게임 플랫폼의 디자인 토큰 + 공통 컴포넌트.
+   · 파스텔톤 동화책 색감 · 둥근 모서리 · 푹신한 그림자 · 귀여운 폰트
+   · 모든 게임/런처가 이 파일 하나를 공유한다.
+     - 런처/Dodge: <link rel="stylesheet" href=".../shared/theme.css">
+     - React 게임(memory·popnpop): main.jsx 에서 import 하여 번들에 포함
+   =================================================================== */
+
+:root {
+  /* 내 프로필(My Avatar) 테마색 — 기본 핑크. 런처가 프로필 선택값으로 동적 갱신. */
+  --fmk-primary:     #ff8fb1;
+
+  /* ── 파스텔 팔레트 ───────────────────────────────────────────── */
+  --fmk-pink:        #ff8fb1;
+  --fmk-pink-soft:   #ffe3f1;
+  --fmk-rose:        #ff6fa3;
+  --fmk-peach:       #ffb38a;
+  --fmk-cream:       #fff3c4;
+  --fmk-yellow:      #ffd93b;
+  --fmk-mint:        #b8f1e0;
+  --fmk-green:       #9fe3b0;
+  --fmk-sky:         #a8d8ff;
+  --fmk-blue:        #7aa8ff;
+  --fmk-lilac:       #d7c3ff;
+  --fmk-purple:      #b18cff;
+
+  /* 글자색 (부드러운 톤) */
+  --fmk-ink:         #6b4a6b;   /* 본문 — 차분한 보라/회색 */
+  --fmk-ink-soft:    #8a6f8a;
+  --fmk-on-dark:     #fffdf8;
+
+  /* 동화책 배경 그라데이션 (런처/게임 공통) */
+  --fmk-bg:          linear-gradient(160deg, #fff0f7 0%, #f3e8ff 38%, #e3f3ff 72%, #e6fff6 100%);
+
+  /* ── 모양 토큰 ──────────────────────────────────────────────── */
+  --fmk-radius-sm:   14px;
+  --fmk-radius:      22px;
+  --fmk-radius-lg:   32px;
+  --fmk-radius-pill: 999px;
+
+  --fmk-shadow:      0 10px 22px rgba(150, 110, 160, 0.22);
+  --fmk-shadow-lg:   0 18px 38px rgba(150, 110, 160, 0.32);
+  --fmk-inset:       inset 0 -6px 0 rgba(0, 0, 0, 0.07);   /* 버튼 아래쪽 입체감 */
+
+  /* ── 폰트 ───────────────────────────────────────────────────── */
+  --fmk-font:        'Jua', 'Gaegu', 'Fredoka', system-ui, -apple-system,
+                     'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+
+  /* 탭 하이라이트 제거용 */
+  --fmk-tap:         rgba(0, 0, 0, 0);
+}
+
+/* ===================================================================
+   공통 리셋 / 기본값 (런처·Dodge 처럼 자체 CSS 가 적은 곳을 위해)
+   React 게임은 이미 자체 리셋이 있으므로 영향은 최소화.
+   =================================================================== */
+.fmk-reset *,
+.fmk-reset *::before,
+.fmk-reset *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: var(--fmk-tap);
+}
+
+.fmk-reset {
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  font-family: var(--fmk-font);
+  color: var(--fmk-ink);
+  background: var(--fmk-bg);
+  background-attachment: fixed;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
+  overflow-x: hidden;
+}
+
+/* ===================================================================
+   전역 모바일 안정화 (모든 페이지 공통 — theme.css 는 런처/게임 어디든 로드됨)
+   · 당겨서 새로고침(pull-to-refresh) / 스와이프 뒤로가기 제스처 차단
+   · 글자 자동 확대 방지 · 아이들이 마구 터치해도 텍스트 블록 선택 안 되게(입력칸은 예외)
+   =================================================================== */
+html, body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ===================================================================
+   정사각형(1:1) 게임 무대 — 화면 중앙 정렬 + 테마색 레터박스 + 최대 크기 제한 + 안전영역
+   · .fmk-stage-wrap : 뷰포트 전체를 덮는 중앙정렬 컨테이너(남는 여백=테마 배경=레터/필러박스)
+   · .fmk-stage      : 항상 1:1 정사각형. 짧은 변(vmin) 기준이라 가로/세로 어디서도 안 잘림.
+   캔버스 게임은 JS 가 이 무대의 rect 를 읽어 캔버스를 사이즈한다(window 대신).
+   =================================================================== */
+.fmk-stage-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 노치/홈바 안전영역(최소 6px 여백 보장) */
+  padding:
+    max(env(safe-area-inset-top, 0px), 6px)
+    max(env(safe-area-inset-right, 0px), 6px)
+    max(env(safe-area-inset-bottom, 0px), 6px)
+    max(env(safe-area-inset-left, 0px), 6px);
+  background: var(--fmk-bg);
+  background-attachment: fixed;
+}
+.fmk-stage {
+  position: relative;
+  /* 짧은 변의 92% → 가로/세로 모두 안전. 큰 화면(태블릿/PC)에선 760px 로 상한. */
+  width: min(92vmin, var(--fmk-stage-max, 760px));
+  height: min(92vmin, var(--fmk-stage-max, 760px));
+  border-radius: var(--fmk-radius);
+  overflow: hidden;
+  box-shadow: var(--fmk-shadow);
+}
+
+/* 스크린리더 전용 (아이콘 버튼의 숨은 라벨용) */
+.fmk-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===================================================================
+   🏠 홈으로 — 모든 게임 화면 '왼쪽 상단' 에 일관되게 떠 있는 버튼
+   (플랫폼 메인 index.html 로 돌아간다. 게임마다 href 의 상대 경로만 다름)
+   =================================================================== */
+.fmk-home-btn {
+  position: fixed;
+  /* 노치/홈바에 안 가리도록 안전영역 확보(max 로 최소 여백 보장) */
+  top: max(clamp(10px, 2.4vw, 18px), env(safe-area-inset-top, 0px));
+  left: max(clamp(10px, 2.4vw, 18px), env(safe-area-inset-left, 0px));
+  z-index: 9999;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-family: var(--fmk-font);
+  font-size: clamp(1rem, 4.2vw, 1.3rem);
+  line-height: 1;
+  color: #7a4f6e;
+  text-decoration: none;
+
+  padding: clamp(9px, 2.4vw, 12px) clamp(14px, 3.4vw, 20px);
+  border: none;
+  cursor: pointer;
+  border-radius: var(--fmk-radius-pill);
+  background: linear-gradient(160deg, #ffffff, #ffe3f1);
+  box-shadow: var(--fmk-shadow), inset 0 -5px 0 rgba(0, 0, 0, 0.06);
+
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: var(--fmk-tap);
+  user-select: none;
+}
+.fmk-home-btn .fmk-home-emoji { font-size: 1.35em; }
+.fmk-home-btn .fmk-home-text  { font-weight: 700; }
+
+.fmk-home-btn:hover {
+  transform: translateY(-3px) scale(1.05) rotate(-2deg);
+  box-shadow: var(--fmk-shadow-lg), inset 0 -5px 0 rgba(0, 0, 0, 0.06);
+}
+.fmk-home-btn:active { transform: scale(0.94); }
+.fmk-home-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--fmk-shadow-lg), 0 0 0 5px rgba(255, 255, 255, 0.9);
+}
+
+/* 모바일(≤640px)에선 글자는 숨기고 🏠 아이콘만 노출
+   — 7~8세 아이는 글자보다 아이콘이 더 직관적이고, 좁은 상단 바와도 안 겹친다.
+   (Tailwind 의 sm 브레이크포인트와 동일하게 맞춰 popnpop 상단 바 여백과 정렬) */
+@media (max-width: 640px) {
+  .fmk-home-btn { padding: clamp(10px, 3vw, 12px); }
+  .fmk-home-btn .fmk-home-text { display: none; }
+  .fmk-home-btn .fmk-home-emoji { font-size: 1.6em; }
+}
+
+/* ===================================================================
+   공통 둥근 버튼 / 큰 버튼 (런처·Dodge 에서 사용)
+   =================================================================== */
+.fmk-btn {
+  font-family: var(--fmk-font);
+  border: none;
+  cursor: pointer;
+  border-radius: var(--fmk-radius-pill);
+  padding: 14px clamp(20px, 5vw, 30px);
+  font-size: clamp(1.1rem, 4.6vw, 1.4rem);
+  color: var(--fmk-on-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(160deg, #ff9dc4, #ff6fa3);
+  box-shadow: var(--fmk-shadow), inset 0 -5px 0 rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: var(--fmk-tap);
+}
+.fmk-btn:hover  { transform: translateY(-4px) scale(1.05); }
+.fmk-btn:active { transform: scale(0.95); }
+.fmk-btn:focus-visible { outline: none; box-shadow: var(--fmk-shadow-lg), 0 0 0 5px rgba(255,255,255,.85); }
+.fmk-btn--sky  { background: linear-gradient(160deg, #9fd0ff, #7aa8ff); }
+.fmk-btn--mint { background: linear-gradient(160deg, #b6f0d6, #5fcf9f); color: #2f7a5b; }
+
+/* ===================================================================
+   접근성: 모션 줄이기
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .fmk-home-btn, .fmk-btn { transition-duration: 0.01ms; }
+}

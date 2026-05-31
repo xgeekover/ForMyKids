@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffe3f1" />
+  <title>ForMyKids · 오늘은 무슨 놀이? 🎀</title>
+
+  <!-- 귀여운 폰트 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- PWA: 설치/오프라인 (public/ 자산은 %BASE_URL% 로 참조) -->
+  <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
+  <link rel="apple-touch-icon" href="%BASE_URL%icon.svg" />
+
+  <!-- 플랫폼 공통 Storybook 테마 -->
+  <link rel="stylesheet" href="shared/theme.css" />
+
+  <style>
+    /* ===== 게임 런처 전용 레이아웃 (공통 테마 토큰 --fmk-* 사용) ===== */
+    html, body { height: 100%; }
+    .launcher {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: clamp(18px, 5vw, 48px) clamp(14px, 4vw, 32px) 48px;
+      gap: clamp(18px, 4vw, 34px);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ---- 떠다니는 배경 장식 ---- */
+    .bg-decor { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .bg-decor span {
+      position: absolute;
+      font-size: clamp(1.8rem, 6vw, 3.4rem);
+      opacity: .5;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,.06));
+      animation: floaty 9s ease-in-out infinite;
+    }
+    .d1 { top: 9%;  left: 7%;  animation-delay: 0s; }
+    .d2 { top: 16%; right: 9%; animation-delay: 1.1s; }
+    .d3 { top: 48%; left: 4%;  animation-delay: 2.2s; }
+    .d4 { bottom: 12%; right: 7%; animation-delay: .7s; }
+    .d5 { bottom: 8%; left: 13%; animation-delay: 1.7s; }
+    .d6 { top: 64%; right: 5%; animation-delay: 2.7s; }
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) rotate(-5deg); }
+      50%      { transform: translateY(-22px) rotate(5deg); }
+    }
+
+    /* ---- 타이틀 ---- */
+    .hero { text-align: center; position: relative; z-index: 1; }
+    .hero-emoji {
+      font-size: clamp(3rem, 13vw, 5.2rem);
+      line-height: 1;
+      display: inline-block;
+      animation: wiggle 2.4s ease-in-out infinite;
+    }
+    @keyframes wiggle {
+      0%,100% { transform: rotate(-9deg); }
+      50%     { transform: rotate(9deg) scale(1.08); }
+    }
+    .hero-title {
+      margin: .15em 0 0;
+      font-size: clamp(2.3rem, 10vw, 4.2rem);
+      line-height: 1.08;
+      background: linear-gradient(90deg, #ff7eb3, #ff9d6c, #6cc8ff, #b18cff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 3px 0 rgba(255,255,255,.6);
+      letter-spacing: .5px;
+    }
+    .hero-sub {
+      margin: .45em 0 0;
+      font-size: clamp(1.05rem, 4.4vw, 1.55rem);
+      color: var(--fmk-ink);
+      opacity: .82;
+    }
+
+    /* ---- 게임 선택 카드 그리드 ---- */
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: clamp(16px, 3.5vw, 26px);
+      width: 100%;
+      max-width: 1040px;
+      position: relative;
+      z-index: 1;
+    }
+    @media (min-width: 760px) {
+      .cards { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .card {
+      --c1: #ffd6ec; --c2: #ff9dc4;     /* JS 가 게임별 색으로 덮어씀 */
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 6px;
+      text-decoration: none;
+      color: #5d3f59;
+      padding: clamp(22px, 4.5vw, 34px) clamp(16px, 4vw, 26px) clamp(20px, 4vw, 30px);
+      border-radius: var(--fmk-radius-lg);
+      background: linear-gradient(160deg, var(--c1), var(--c2));
+      box-shadow: var(--fmk-shadow), inset 0 -8px 0 rgba(0,0,0,.07), inset 0 0 0 5px rgba(255,255,255,.55);
+      overflow: hidden;
+      cursor: pointer;
+      transform: translateY(0);
+      transition: transform .18s cubic-bezier(.2,.9,.3,1.4), box-shadow .18s ease;
+      animation: card-pop .55s backwards cubic-bezier(.2,.9,.3,1.4);
+      -webkit-tap-highlight-color: rgba(0,0,0,0);
+    }
+    .card:nth-child(1) { animation-delay: .05s; }
+    .card:nth-child(2) { animation-delay: .16s; }
+    .card:nth-child(3) { animation-delay: .27s; }
+    .card:nth-child(4) { animation-delay: .38s; }
+    @keyframes card-pop {
+      from { opacity: 0; transform: translateY(30px) scale(.9); }
+      to   { opacity: 1; transform: none; }
+    }
+    .card:hover, .card:focus-visible {
+      outline: none;
+      transform: translateY(-10px) scale(1.035) rotate(-1deg);
+      box-shadow: var(--fmk-shadow-lg), inset 0 -8px 0 rgba(0,0,0,.07), inset 0 0 0 5px rgba(255,255,255,.7);
+    }
+    .card:active { transform: translateY(-2px) scale(.99); }
+
+    /* 카드 안 떠다니는 작은 장식 */
+    .card-floaters { position: absolute; inset: 0; pointer-events: none; }
+    .card-floaters span {
+      position: absolute;
+      font-size: clamp(1rem, 3.4vw, 1.5rem);
+      opacity: .5;
+      animation: floaty 7s ease-in-out infinite;
+    }
+    .card-floaters span:nth-child(1) { top: 12%; left: 10%; animation-delay: .2s; }
+    .card-floaters span:nth-child(2) { top: 20%; right: 12%; animation-delay: 1.3s; }
+    .card-floaters span:nth-child(3) { bottom: 30%; left: 14%; animation-delay: 2.1s; }
+
+    .card-icon {
+      font-size: clamp(3.6rem, 16vw, 5.6rem);
+      line-height: 1;
+      filter: drop-shadow(0 6px 8px rgba(0,0,0,.16));
+      animation: bob 2.8s ease-in-out infinite;
+      position: relative;
+      z-index: 1;
+    }
+    .card:hover .card-icon { animation: pop-spin .6s ease; }
+    @keyframes bob {
+      0%,100% { transform: translateY(0); }
+      50%     { transform: translateY(-10px); }
+    }
+    @keyframes pop-spin {
+      0% { transform: scale(1) rotate(0); }
+      45% { transform: scale(1.2) rotate(-10deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+
+    .card-title {
+      font-size: clamp(1.5rem, 6vw, 2.1rem);
+      margin: 4px 0 0;
+      position: relative; z-index: 1;
+      text-shadow: 0 2px 0 rgba(255,255,255,.45);
+    }
+    .card-sub {
+      font-size: clamp(.95rem, 3.8vw, 1.15rem);
+      opacity: .85;
+      margin: 0;
+      position: relative; z-index: 1;
+    }
+    /* 기록 배지(최고 점수/별/플레이 횟수) */
+    .card-stat {
+      margin-top: 8px;
+      font-family: var(--fmk-font);
+      font-size: clamp(.82rem, 3.3vw, 1rem);
+      color: inherit;                 /* 카드의 파스텔 글자색을 그대로 물려받아 유기적으로 */
+      background: rgba(255,255,255,.5);
+      border-radius: var(--fmk-radius-pill);
+      padding: 5px 15px;
+      position: relative; z-index: 1;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.66);
+      letter-spacing: .2px;
+      opacity: .92;
+      white-space: nowrap;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-go {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: clamp(1rem, 4vw, 1.2rem);
+      font-weight: 700;
+      color: #fff;
+      background: rgba(255,255,255,.32);
+      border: 2px solid rgba(255,255,255,.7);
+      border-radius: var(--fmk-radius-pill);
+      padding: 8px 20px;
+      position: relative; z-index: 1;
+      box-shadow: inset 0 -3px 0 rgba(0,0,0,.08);
+      transition: transform .15s ease;
+    }
+    .card-go .play-arrow { font-size: 1.1em; }
+    .card:hover .card-go { transform: scale(1.06); }
+
+    /* ---- 칭찬 도장(업적) 칩 + 모달 ---- */
+    .ach-chip {
+      font-family: var(--fmk-font);
+      display: inline-flex;
+      align-items: center;
+      min-height: 48px;
+      box-sizing: border-box;
+      gap: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: clamp(1rem, 4.2vw, 1.25rem);
+      color: #7a4f6e;
+      background: linear-gradient(160deg, #fff7d6, #ffe6a8);
+      border-radius: var(--fmk-radius-pill);
+      padding: 10px clamp(18px, 4vw, 26px);
+      box-shadow: var(--fmk-shadow), inset 0 -4px 0 rgba(0,0,0,.06);
+      transition: transform .15s ease;
+      position: relative; z-index: 1;
+    }
+    .ach-chip b { font-size: 1.1em; }
+    .ach-chip:hover { transform: translateY(-3px) scale(1.04); }
+    .ach-chip:active { transform: scale(.96); }
+
+    .footer-hint {
+      text-align: center;
+      font-size: clamp(.95rem, 3.6vw, 1.15rem);
+      color: var(--fmk-ink);
+      opacity: .7;
+      position: relative; z-index: 1;
+      animation: breathe 2.8s ease-in-out infinite;
+    }
+    @keyframes breathe { 0%,100%{opacity:.5} 50%{opacity:.9} }
+
+    .ach-modal {
+      position: fixed; inset: 0; z-index: 9000;
+      display: flex; align-items: center; justify-content: center;
+      padding: 18px;
+      background: rgba(120,100,150,.42);
+      backdrop-filter: blur(4px);
+      animation: screen-fade .25s ease;
+    }
+    .ach-modal[hidden] { display: none; }
+    @keyframes screen-fade { from{opacity:0} to{opacity:1} }
+    .ach-modal-card {
+      position: relative;
+      background: linear-gradient(165deg, #fffdf8, #fff0f7);
+      border-radius: var(--fmk-radius-lg);
+      padding: clamp(22px, 5vw, 34px);
+      max-width: 460px; width: 100%;
+      max-height: 88dvh; overflow-y: auto;
+      box-shadow: var(--fmk-shadow-lg), inset 0 0 0 5px rgba(255,255,255,.7);
+      animation: card-pop .5s cubic-bezier(.2,.9,.3,1.5);
+    }
+    .ach-modal-title { text-align: center; margin: 0 0 14px; font-size: clamp(1.6rem,7vw,2.2rem); color:#8a5cc7; }
+    .ach-close {
+      position: absolute; top: 12px; right: 12px;
+      width: 42px; height: 42px; border: none; cursor: pointer;
+      border-radius: 50%; font-size: 1.3rem;
+      background: #fff; box-shadow: var(--fmk-shadow);
+      font-family: var(--fmk-font); color: #7a4f6e;
+    }
+    /* 칭찬 도장 그리드/스탬프 스타일은 아래 '칭찬 도장(stamp)' 섹션에 단일 정의됨 */
+    .ach-reset {
+      display: block; margin: 18px auto 0;
+      font-family: var(--fmk-font); cursor: pointer;
+      border: 2px solid rgba(180,150,255,.4); background: #fff;
+      color: var(--fmk-ink-soft); border-radius: var(--fmk-radius-pill);
+      padding: 8px 20px; font-size: .95rem;
+    }
+
+    /* ===== 칭찬 도장(stamp) 그리드 + '쾅!' 연출 + 폭죽 ===== */
+    .launcher-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; position: relative; z-index: 1; }
+    .ach-chip--parents { background: linear-gradient(160deg, #e9e0ff, #c9b6ff); color: #4a3a86; }
+    /* 📱 앱 설치하기 칩 — 눈에 띄게 은은한 펄스 */
+    .ach-chip--install { background: linear-gradient(160deg, #c8f7d4, #7fe0a0); color: #1f7a4d; animation: installPulse 1.8s ease-in-out infinite; }
+    .ach-chip--install[hidden] { display: none; }
+    @keyframes installPulse { 0%, 100% { box-shadow: var(--fmk-shadow), inset 0 -4px 0 rgba(0,0,0,.06); } 50% { box-shadow: 0 0 0 5px rgba(127,224,160,.45), var(--fmk-shadow); } }
+
+    .ach-new-badge {
+      display: inline-grid; place-items: center;
+      min-width: 1.5em; height: 1.5em; padding: 0 .4em;
+      margin-left: 6px; border-radius: 999px;
+      background: #ff6fa3; color: #fff; font-size: .8em; font-weight: 700;
+      box-shadow: 0 2px 6px rgba(255,111,163,.5);
+      animation: badge-pulse 1s ease-in-out infinite;
+    }
+    @keyframes badge-pulse { 0%,100%{ transform: scale(1) } 50%{ transform: scale(1.18) } }
+    .ach-chip.has-new { animation: chip-wobble 1.4s ease-in-out infinite; }
+    @keyframes chip-wobble { 0%,100%{ transform: rotate(-1.5deg) } 50%{ transform: rotate(1.5deg) } }
+
+    .ach-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+      gap: 12px;
+    }
+    .ach-item {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 12px 8px; border-radius: var(--fmk-radius);
+      background: #fff; box-shadow: inset 0 0 0 2px rgba(180,150,255,.14);
+      text-align: center;
+    }
+    .ach-item.is-unlocked { background: linear-gradient(170deg, #fffdf6, #fff); box-shadow: inset 0 0 0 3px rgba(255,200,90,.5); }
+    .ach-item.is-locked { opacity: .55; filter: grayscale(.7); }
+    .ach-stamp {
+      --stamp: #ddd;
+      width: 62px; height: 62px; border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 1.9rem; line-height: 1;
+      background: radial-gradient(circle at 35% 28%, #fff 0 16%, var(--stamp) 72%);
+      box-shadow: 0 4px 10px rgba(150,110,160,.25), inset 0 0 0 4px rgba(255,255,255,.65), inset 0 0 0 6px var(--stamp);
+    }
+    .ach-item.is-locked .ach-stamp {
+      --stamp: #cfc7d6;
+      background: #ececf1;
+      box-shadow: inset 0 0 0 4px #fff, inset 0 0 0 6px #d8d2e0;
+    }
+    .ach-stamp-title { font-size: clamp(.85rem, 3.6vw, 1rem); color: var(--fmk-ink); line-height: 1.15; }
+    .ach-stamp-desc { font-size: clamp(.7rem, 3vw, .82rem); color: var(--fmk-ink-soft); line-height: 1.2; }
+
+    /* 새로 딴 도장: '쾅!' 하고 찍히는 스케일 + 잠깐 반짝이는 글로우 */
+    .ach-item.is-new .ach-stamp {
+      animation: stamp-in .7s cubic-bezier(.2,.8,.2,1.2) both, stamp-glow 1.3s ease-in-out .7s 2;
+    }
+    @keyframes stamp-in {
+      0%   { transform: scale(2.6) rotate(-22deg); opacity: 0; }
+      55%  { transform: scale(.82) rotate(6deg);   opacity: 1; }
+      72%  { transform: scale(1.12) rotate(-3deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    @keyframes stamp-glow {
+      0%,100% { box-shadow: 0 4px 10px rgba(150,110,160,.25), inset 0 0 0 4px rgba(255,255,255,.65), inset 0 0 0 6px var(--stamp); }
+      50%     { box-shadow: 0 0 20px 7px var(--stamp), inset 0 0 0 4px #fff, inset 0 0 0 6px var(--stamp); }
+    }
+    .ach-item.is-new .ach-stamp-title::after { content: ' NEW!'; color: #ff6fa3; font-size: .82em; }
+
+    .ach-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: var(--fmk-radius-lg); z-index: 3; }
+    .ach-confetti i {
+      position: absolute; top: -10%; width: 10px; height: 14px; border-radius: 3px;
+      opacity: .95; will-change: transform; animation: ach-confetti-fall 1.2s ease-in forwards;
+    }
+    @keyframes ach-confetti-fall {
+      0%   { transform: translateY(0) rotate(0); opacity: 1; }
+      100% { transform: translateY(560%) rotate(560deg); opacity: 0; }
+    }
+
+    /* ===== 부모님 방 대시보드 (순수 CSS 막대그래프) ===== */
+    .parents-card { max-width: 520px; text-align: left; }
+    /* 클라우드 동기화 상태 배지(우측 상단, ✕ 버튼 왼쪽) */
+    .sync-badge {
+      position: absolute; top: 16px; right: 64px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 999px;
+      font-size: .82rem; font-weight: 700; line-height: 1;
+      background: #f3eefb; color: #8a5cc7; box-shadow: var(--fmk-shadow);
+      transition: background .25s, color .25s;
+      white-space: nowrap; user-select: none;
+    }
+    .sync-badge .sync-dot { font-size: .7rem; }
+    .sync-badge[data-status="online"]  { background: #e6f7ee; color: #2e9e6b; }
+    .sync-badge[data-status="offline"] { background: #fdecec; color: #d2685f; }
+    .sync-badge[data-status="syncing"] { background: #fff5e0; color: #c08a23; }
+    .sync-badge[data-status="syncing"] .sync-dot { animation: syncPulse 1s ease-in-out infinite; }
+    @keyframes syncPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    @media (max-width: 420px) { .sync-badge .sync-label { display: none; } .sync-badge { right: 60px; padding: 6px; } }
+    .dash-section { margin-bottom: 18px; }
+    .dash-title { font-size: clamp(1.05rem, 4.4vw, 1.25rem); color: #8a5cc7; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+    .dash-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+    .dash-label { flex: 0 0 auto; width: clamp(78px, 30vw, 132px); font-size: clamp(.82rem, 3.5vw, 1rem); color: var(--fmk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dash-track { flex: 1 1 auto; height: 18px; border-radius: 999px; background: rgba(180,150,255,.16); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(180,150,255,.18); }
+    .dash-fill { height: 100%; border-radius: 999px; min-width: 3px; transition: width .6s cubic-bezier(.2,.9,.3,1.2); }
+    .dash-val { flex: 0 0 auto; min-width: 62px; text-align: right; font-size: clamp(.82rem, 3.4vw, .98rem); color: var(--fmk-ink-soft); }
+    .dash-empty { color: var(--fmk-ink-soft); font-size: .95rem; padding: 4px 0; }
+    .dash-guide { background: linear-gradient(160deg, #fff7ea, #ffeccf); border-radius: var(--fmk-radius); padding: 12px 14px; font-size: clamp(.92rem, 3.8vw, 1.06rem); color: #7a5a2a; line-height: 1.5; box-shadow: inset 0 0 0 2px rgba(255,200,120,.35); }
+    .dash-guide p { margin: 0 0 6px; }
+    .dash-guide p:last-child { margin-bottom: 0; }
+    .dash-backup { margin-top: 4px; }
+    .backup-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .backup-actions .fmk-btn { font-size: clamp(.95rem, 4vw, 1.1rem); padding: 11px 18px; }
+    .dash-hint { margin: 10px 0 0; font-size: clamp(.82rem, 3.4vw, .95rem); color: var(--fmk-ink-soft); line-height: 1.45; }
+
+    /* ===== 태블릿 / 가로모드 엣지케이스 방어 ===== */
+    @media (min-width: 520px) and (max-width: 759px) {
+      .cards { grid-template-columns: repeat(2, 1fr); } /* 큰 폰·작은 태블릿: 2열 */
+    }
+    @media (max-height: 560px) and (orientation: landscape) {
+      .launcher { justify-content: flex-start; gap: 12px; padding-top: 14px; }
+      .hero-emoji { font-size: clamp(1.8rem, 7vh, 2.6rem); }
+      .hero-title { font-size: clamp(1.5rem, 6.5vh, 2.4rem); }
+      .hero-sub { font-size: clamp(.9rem, 3.6vh, 1.2rem); }
+      .cards { grid-template-columns: repeat(3, 1fr); gap: 12px; } /* 가로에선 3열로 눕혀 안 잘리게 */
+      .card { padding: 12px 10px; }
+      .card-icon { font-size: clamp(2.2rem, 9vh, 3.2rem); }
+      .card-go { margin-top: 6px; padding: 6px 16px; }
+    }
+    @media (max-height: 600px) {
+      .ach-modal-card { max-height: 94dvh; padding: 16px 18px; }
+      .ach-stamp { width: 52px; height: 52px; font-size: 1.55rem; }
+    }
+
+    /* ===== 별가루 배경 ===== */
+    .stardust { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .stardust i {
+      position: absolute;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.85);
+      opacity: 0.4;
+      animation: twinkle var(--tw, 4s) ease-in-out infinite, dust-drift var(--df, 16s) linear infinite;
+    }
+    @keyframes twinkle { 0%, 100% { opacity: 0.15; transform: scale(0.7); } 50% { opacity: 0.85; transform: scale(1.12); } }
+    @keyframes dust-drift { from { transform: translateY(8px); } to { transform: translateY(-28px); } }
+
+    /* ===== 종합 성적표 배지 ===== */
+    .report-badge {
+      margin: clamp(12px, 3vw, 18px) auto 0;
+      display: inline-flex; align-items: center; gap: 12px;
+      font-family: var(--fmk-font); cursor: pointer; border: none;
+      background: linear-gradient(160deg, #fff7d6, #ffe6a8);
+      border-radius: var(--fmk-radius-lg);
+      padding: 10px clamp(16px, 4vw, 24px);
+      box-shadow: var(--fmk-shadow), inset 0 -5px 0 rgba(0, 0, 0, 0.06), inset 0 0 0 4px rgba(255, 255, 255, 0.6);
+      color: #7a4f6e; position: relative; z-index: 1;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .report-badge:hover { transform: translateY(-3px) scale(1.03); }
+    .report-badge:active { transform: scale(0.97); }
+    .report-badge.has-new { animation: rb-wobble 1.5s ease-in-out infinite; }
+    @keyframes rb-wobble { 0%, 100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.2deg); } }
+    .rb-trophy { font-size: clamp(1.8rem, 7vw, 2.4rem); line-height: 1; }
+    .rb-main { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+    .rb-text { font-size: clamp(1rem, 4.2vw, 1.25rem); }
+    .rb-text b { color: #ff6fa3; }
+    .rb-sep { opacity: 0.5; margin: 0 1px; }
+    .rb-bar { width: clamp(120px, 42vw, 190px); height: 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05); }
+    .rb-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #ffd93b, #ff9d6c, #ff6fa3); transition: width 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+    .rb-stamps { display: flex; gap: 3px; flex-wrap: wrap; max-width: 132px; }
+    .rb-stamps .dot { font-size: 0.95rem; line-height: 1; filter: grayscale(1) opacity(0.35); }
+    .rb-stamps .dot.on { filter: none; }
+    .rb-stamps .dot.is-new { animation: dot-pop 0.6s ease; }
+    @keyframes dot-pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+
+    /* 소리 토글 칩 */
+    .ach-chip--mute { background: linear-gradient(160deg, #e6f7ff, #bfe3ff); color: #2f5d86; }
+    .ach-chip--mute.is-off { opacity: 0.7; }
+
+    /* 런처 안내 토스트(복구 성공 등) */
+    .launcher-toast {
+      position: fixed; left: 50%; top: 14%;
+      transform: translateX(-50%) translateY(-12px);
+      z-index: 9500; max-width: 90vw;
+      background: linear-gradient(160deg, #fffdf8, #fff0f7);
+      color: var(--fmk-ink); font-family: var(--fmk-font);
+      font-size: clamp(1rem, 4vw, 1.2rem); line-height: 1.45;
+      padding: 14px 22px; border-radius: var(--fmk-radius-lg);
+      box-shadow: var(--fmk-shadow-lg), inset 0 0 0 4px rgba(255, 255, 255, 0.7);
+      opacity: 0; pointer-events: none; text-align: center;
+      transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.5);
+    }
+    .launcher-toast.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 부모님 방 — AI 맞춤 코멘트(성장 가이드) */
+    .dash-coach {
+      background: linear-gradient(160deg, #eafaf0, #dff0ff);
+      border-radius: var(--fmk-radius);
+      padding: 14px 16px;
+      box-shadow: inset 0 0 0 2px rgba(120, 200, 170, 0.35);
+      margin-bottom: 18px;
+    }
+    .dash-coach .coach-title { font-size: clamp(1.05rem, 4.4vw, 1.25rem); color: #2f7a5b; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
+    .dash-coach .coach-text { font-size: clamp(0.95rem, 3.9vw, 1.1rem); color: var(--fmk-ink); line-height: 1.55; margin: 0; }
+
+    /* ⚙️ 설정 버튼(우측 상단) + 설정 모달 토글 */
+    .settings-btn {
+      position: fixed; top: max(clamp(10px, 2.4vw, 18px), env(safe-area-inset-top, 0px)); right: max(clamp(10px, 2.4vw, 18px), env(safe-area-inset-right, 0px));
+      z-index: 9999; width: clamp(48px, 12vw, 56px); height: clamp(48px, 12vw, 56px);
+      border: none; cursor: pointer; border-radius: 50%;
+      font-size: clamp(1.4rem, 6vw, 1.8rem);
+      background: linear-gradient(160deg, #ffffff, #ece1ff);
+      box-shadow: var(--fmk-shadow), inset 0 -5px 0 rgba(0, 0, 0, 0.06);
+      display: grid; place-items: center;
+      transition: transform 0.18s ease;
+    }
+    .settings-btn:hover { transform: rotate(40deg) scale(1.08); }
+    .settings-btn:active { transform: scale(0.92); }
+    .settings-btn:focus-visible { outline: none; box-shadow: var(--fmk-shadow-lg), 0 0 0 5px rgba(255, 255, 255, 0.9); }
+
+    .settings-card { max-width: 420px; }
+    .settings-row {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%; margin: 0 0 12px; padding: 12px 14px;
+      border: none; cursor: pointer; font-family: var(--fmk-font);
+      background: #fff; border-radius: var(--fmk-radius);
+      box-shadow: inset 0 0 0 2px rgba(180, 150, 255, 0.18);
+      color: var(--fmk-ink); font-size: clamp(1rem, 4.2vw, 1.2rem);
+    }
+    .settings-label { flex: 1 1 auto; text-align: left; display: flex; align-items: center; gap: 8px; }
+    .settings-ico { font-size: 1.2em; }
+    .settings-switch { flex: 0 0 auto; width: 54px; height: 30px; border-radius: 999px; background: #d8d2e0; position: relative; transition: background 0.2s ease; }
+    .settings-knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.4); }
+    .settings-row[aria-checked="true"] .settings-switch { background: linear-gradient(160deg, #9fe3b0, #5fcf9f); }
+    .settings-row[aria-checked="true"] .settings-knob { transform: translateX(24px); }
+    .settings-state { flex: 0 0 auto; min-width: 2.6em; text-align: right; font-weight: 700; font-size: 0.92em; color: var(--fmk-ink-soft); }
+    .settings-hint { font-size: clamp(0.82rem, 3.4vw, 0.95rem); color: var(--fmk-ink-soft); line-height: 1.45; margin: 6px 0 0; }
+
+    /* 🎨 내 프로필 버튼(좌측 상단) — 선택한 아바타 표시 + 테마색 링 */
+    .profile-btn {
+      position: fixed; top: max(clamp(10px, 2.4vw, 18px), env(safe-area-inset-top, 0px)); left: max(clamp(10px, 2.4vw, 18px), env(safe-area-inset-left, 0px));
+      z-index: 9999; width: clamp(48px, 12vw, 56px); height: clamp(48px, 12vw, 56px);
+      border: none; cursor: pointer; border-radius: 50%;
+      background: #fff;
+      box-shadow: var(--fmk-shadow), inset 0 0 0 4px var(--fmk-primary);
+      display: grid; place-items: center;
+      transition: transform 0.18s ease;
+    }
+    .profile-avatar { font-size: clamp(1.5rem, 6vw, 2rem); line-height: 1; }
+    .profile-btn:hover { transform: translateY(-3px) scale(1.07); }
+    .profile-btn:active { transform: scale(0.92); }
+    .profile-btn:focus-visible { outline: none; box-shadow: var(--fmk-shadow-lg), 0 0 0 5px rgba(255, 255, 255, 0.9), inset 0 0 0 4px var(--fmk-primary); }
+
+    /* 헤더(타이틀 영역)에 테마색을 은은하게 반영 */
+    .launcher::before {
+      content: ''; position: fixed; left: 0; right: 0; top: 0; height: 42vh;
+      pointer-events: none; z-index: 0;
+      background: radial-gradient(120% 80% at 50% -10%, var(--fmk-primary) 0%, transparent 62%);
+      opacity: 0.14;
+    }
+    .hero-emoji { filter: drop-shadow(0 6px 10px var(--fmk-primary)); }
+
+    /* 프로필 모달: 아바타/색 선택 그리드 */
+    .profile-card { max-width: 420px; text-align: center; }
+    .profile-sub { font-size: clamp(0.95rem, 4vw, 1.1rem); color: var(--fmk-ink); margin: 6px 0 10px; }
+    .profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+    .avatar-opt {
+      border: none; cursor: pointer; border-radius: var(--fmk-radius);
+      padding: 12px 0; min-height: 48px; background: #fff; box-shadow: inset 0 0 0 2px rgba(180, 150, 255, 0.2);
+      font-size: clamp(1.9rem, 9vw, 2.6rem); line-height: 1; transition: transform 0.12s ease;
+    }
+    .avatar-opt:hover { transform: scale(1.08); }
+    .avatar-opt.is-selected { box-shadow: inset 0 0 0 4px var(--fmk-primary); background: linear-gradient(160deg, #fffdf6, #fff); }
+    .color-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .color-opt {
+      width: clamp(48px, 11vw, 52px); height: clamp(48px, 11vw, 52px); border-radius: 50%;
+      border: none; cursor: pointer; box-shadow: var(--fmk-shadow), inset 0 -4px 0 rgba(0, 0, 0, 0.08);
+      transition: transform 0.12s ease; position: relative;
+    }
+    .color-opt:hover { transform: scale(1.12); }
+    .color-opt.is-selected { box-shadow: var(--fmk-shadow), 0 0 0 4px #fff, 0 0 0 7px rgba(120, 90, 140, 0.35); }
+    .color-opt.is-selected::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 1.2rem; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+
+    /* 내 프로필 모달: 이름 입력 + 다른 친구로 바꾸기 버튼 */
+    .ps-name-input {
+      width: 100%; box-sizing: border-box; font-family: var(--fmk-font);
+      font-size: clamp(1rem, 4.4vw, 1.2rem); text-align: center;
+      padding: 11px 14px; border-radius: var(--fmk-radius);
+      border: none; box-shadow: inset 0 0 0 2px rgba(180, 150, 255, 0.3);
+      color: var(--fmk-ink); margin-bottom: 6px;
+    }
+    .ps-name-input:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--fmk-primary); }
+    .ps-switch { margin-top: 16px; }
+
+    /* ===== '누가 놀까요?' 프로필 선택 화면 ===== */
+    .profile-select-card { max-width: 470px; text-align: center; }
+    .ps-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; }
+    .ps-profile, .ps-add {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      border: none; cursor: pointer; font-family: var(--fmk-font);
+      padding: 16px 10px; border-radius: var(--fmk-radius);
+      background: #fff; color: var(--fmk-ink);
+      box-shadow: inset 0 0 0 4px var(--ps-ring, #ffd6ec), var(--fmk-shadow);
+      transition: transform 0.14s ease;
+    }
+    .ps-profile:hover, .ps-add:hover { transform: translateY(-4px) scale(1.04); }
+    .ps-profile:active, .ps-add:active { transform: scale(0.97); }
+    .ps-profile:focus-visible, .ps-add:focus-visible { outline: none; box-shadow: inset 0 0 0 4px var(--ps-ring, #ffd6ec), 0 0 0 4px rgba(255, 255, 255, 0.9), var(--fmk-shadow-lg); }
+    .ps-avatar { font-size: clamp(2.4rem, 11vw, 3.2rem); line-height: 1; }
+    .ps-name { font-size: clamp(1rem, 4.4vw, 1.2rem); font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ps-meta { font-size: clamp(0.72rem, 3vw, 0.85rem); color: var(--fmk-ink-soft); }
+    .ps-add { background: linear-gradient(160deg, #f3eefb, #e3d6ff); box-shadow: inset 0 0 0 3px rgba(180, 150, 255, 0.35), var(--fmk-shadow); }
+    .ps-add .ps-avatar { color: #8a5cc7; }
+    .ps-create { text-align: center; }
+    .ps-create-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+
+    /* ===== 부모님 방 — 아이별 탭 ===== */
+    .child-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+    .child-tab {
+      display: inline-flex; align-items: center; gap: 7px;
+      border: none; cursor: pointer; font-family: var(--fmk-font);
+      padding: 7px 14px 7px 11px; border-radius: var(--fmk-radius-pill);
+      background: #f3eefb; color: var(--fmk-ink-soft);
+      box-shadow: inset 0 0 0 2px rgba(180, 150, 255, 0.16);
+      font-size: clamp(0.9rem, 3.6vw, 1.05rem); transition: transform 0.12s ease, background 0.2s;
+    }
+    .child-tab .child-tab-avatar { font-size: 1.3em; line-height: 1; }
+    .child-tab:hover { transform: translateY(-2px); }
+    .child-tab.is-active { background: linear-gradient(160deg, #fff7d6, #ffe6a8); color: #7a4f6e; box-shadow: inset 0 0 0 3px rgba(255, 200, 90, 0.5); }
+    /* 부모님 방 — ⏰ 플레이 시간 + 📷 커스텀 퍼즐 컨트롤 */
+    .screentime-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .screentime-label { font-size: clamp(.9rem, 3.6vw, 1.05rem); color: var(--fmk-ink); }
+    .screentime-select { font-family: var(--fmk-font); font-size: 1rem; padding: 8px 14px; border-radius: var(--fmk-radius); border: none; box-shadow: inset 0 0 0 2px rgba(180,150,255,.3); color: var(--fmk-ink); background: #fff; cursor: pointer; }
+    .custom-puzzle { display: flex; flex-direction: column; gap: 10px; }
+    .cp-preview { width: 100%; height: 130px; border-radius: var(--fmk-radius); background: #f3eefb center/cover no-repeat; box-shadow: inset 0 0 0 2px rgba(180,150,255,.22); }
+    .cp-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .fmk-btn[hidden] { display: none !important; } /* .fmk-btn 의 display 가 [hidden] 을 덮지 않도록 */
+    .screenlock-card { max-width: 420px; text-align: center; }
+    .screenlock-emoji { font-size: clamp(3rem, 12vw, 3.8rem); line-height: 1; }
+
+    /* 부모님 방 — 아이별 칭찬 도장 미니 그리드 */
+    .dash-stamps { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px; }
+    .dash-stamp { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 1.5rem; line-height: 1; }
+    .dash-stamp.is-locked { opacity: 0.4; filter: grayscale(0.8); }
+    .dash-stamp .dash-stamp-cap { font-size: 0.62rem; color: var(--fmk-ink-soft); text-align: center; line-height: 1.1; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bg-decor span, .hero-emoji, .card, .card-icon, .footer-hint, .ach-chip, .ach-modal, .ach-modal-card,
+      .ach-item .ach-stamp, .ach-confetti i, .ach-new-badge, .ach-chip.has-new, .dash-fill,
+      .stardust i, .report-badge.has-new, .rb-fill, .rb-stamps .dot.is-new, .launcher-toast,
+      .settings-btn, .settings-knob, .settings-switch,
+      .profile-btn, .avatar-opt, .color-opt, .sync-badge, .sync-badge .sync-dot,
+      .child-tab, .ps-profile, .ps-add, .ach-chip--install { animation: none !important; transition: none !important; }
+      .card { transition: none; }
+    }
+  </style>
+</head>
+
+<body class="fmk-reset launcher">
+  <!-- 은은한 별가루 배경(JS 가 점들을 채움) -->
+  <div class="stardust" id="stardust" aria-hidden="true"></div>
+
+  <!-- 🎨 내 프로필 버튼 (좌측 상단) — 아바타/테마색 -->
+  <button class="profile-btn" id="profileBtn" type="button" aria-label="내 프로필 — 아바타와 색 고르기">
+    <span class="profile-avatar" id="profileAvatar" aria-hidden="true">🙂</span>
+  </button>
+
+  <!-- ⚙️ 설정 버튼 (우측 상단) — 소리/전체화면 -->
+  <button class="settings-btn" id="settingsBtn" type="button" aria-label="설정 — 소리와 전체화면">
+    <span aria-hidden="true">⚙️</span>
+  </button>
+
+  <!-- 배경 장식 -->
+  <div class="bg-decor" aria-hidden="true">
+    <span class="d1">⭐</span>
+    <span class="d2">🌈</span>
+    <span class="d3">☁️</span>
+    <span class="d4">🎈</span>
+    <span class="d5">✨</span>
+    <span class="d6">🌟</span>
+  </div>
+
+  <!-- 타이틀 -->
+  <header class="hero">
+    <div class="hero-emoji" aria-hidden="true">🎀</div>
+    <h1 class="hero-title">놀이터에 온 걸 환영해!</h1>
+    <p class="hero-sub">오늘은 어떤 놀이를 해볼까? 카드를 콕! 눌러봐 👇</p>
+
+    <!-- 종합 성적표 배지: 모은 칭찬 도장 요약 (누르면 도장 모달) -->
+    <button class="report-badge" id="reportBadge" type="button" aria-label="모은 칭찬 도장 보기">
+      <span class="rb-trophy" aria-hidden="true">🏆</span>
+      <span class="rb-main">
+        <span class="rb-text">모은 도장 <b id="rbCount">0</b><span class="rb-sep">/</span><b id="rbTotal">0</b>개</span>
+        <span class="rb-bar"><span class="rb-fill" id="rbFill"></span></span>
+      </span>
+      <span class="rb-stamps" id="rbStamps" aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <!-- 게임 선택 카드 (games.config.js 레지스트리로부터 동적 생성) -->
+  <main class="cards" id="cards">
+    <noscript>이 놀이터는 자바스크립트가 필요해요 🙏</noscript>
+  </main>
+
+  <!-- 부모님 방 (소리/전체화면은 우측 상단 ⚙️ 설정으로 이동) -->
+  <div class="launcher-actions">
+    <button class="ach-chip ach-chip--parents" id="parentsChip" type="button" aria-label="부모님 방 — 성장 대시보드">
+      <span aria-hidden="true">👪</span> 부모님 방
+    </button>
+    <!-- 📱 앱 설치하기 — beforeinstallprompt 가 잡힐 때만 노출(이미 설치/미지원이면 숨김) -->
+    <button class="ach-chip ach-chip--install" id="installBtn" type="button" hidden aria-label="앱 설치하기 — 홈 화면에 추가">
+      <span aria-hidden="true">📱</span> 앱 설치하기
+    </button>
+  </div>
+
+  <p class="footer-hint">집 모양 🏠 버튼을 누르면 언제든 여기로 돌아올 수 있어요!</p>
+
+  <!-- 런처 안내 토스트(복구 성공 등) -->
+  <div class="launcher-toast" id="launcherToast" aria-live="polite"></div>
+
+  <!-- 칭찬 도장 모달 -->
+  <div class="ach-modal" id="achModal" hidden>
+    <div class="ach-modal-card" role="dialog" aria-modal="true" aria-label="칭찬 도장">
+      <div class="ach-confetti" id="achConfetti" aria-hidden="true"></div>
+      <button class="ach-close" id="achClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="ach-modal-title">🏆 칭찬 도장</h2>
+      <div class="ach-list" id="achList"></div>
+    </div>
+  </div>
+
+  <!-- 부모님 방(성장 대시보드) 모달 — 곱셈 게이트 통과 후 진입 -->
+  <div class="ach-modal" id="parentsModal" hidden>
+    <div class="ach-modal-card parents-card" role="dialog" aria-modal="true" aria-label="부모님 방">
+      <button class="ach-close" id="parentsClose" type="button" aria-label="닫기">✕</button>
+      <!-- 클라우드 동기화 상태(우측 상단) -->
+      <div class="sync-badge" id="syncBadge" data-status="offline" title="클라우드 동기화 상태" aria-live="polite">
+        <span class="sync-dot" id="syncDot" aria-hidden="true">🔴</span>
+        <span class="sync-label" id="syncLabel">오프라인</span>
+      </div>
+      <h2 class="ach-modal-title">👪 부모님 방</h2>
+      <!-- 아이별 탭 — 탭을 누르면 해당 아이의 통계/도장으로 전환 -->
+      <div class="child-tabs" id="childTabs" role="tablist" aria-label="아이 선택"></div>
+      <div id="dashboard" class="dashboard"></div>
+
+      <!-- ⏰ 플레이 시간 제한 (보고 있는 아이 기준) -->
+      <div class="dash-section">
+        <h3 class="dash-title">⏰ 플레이 시간</h3>
+        <div class="screentime-row">
+          <label class="screentime-label" for="limitSelect">하루 최대</label>
+          <select class="screentime-select" id="limitSelect" aria-label="하루 최대 플레이 시간">
+            <option value="0">제한 없음</option>
+            <option value="15">15분</option>
+            <option value="30">30분</option>
+            <option value="45">45분</option>
+            <option value="60">60분</option>
+            <option value="90">90분</option>
+          </select>
+        </div>
+        <p class="dash-hint" id="screentimeInfo"></p>
+      </div>
+
+      <!-- 📷 커스텀(가족 사진) 퍼즐 (보고 있는 아이 기준) -->
+      <div class="dash-section">
+        <h3 class="dash-title">📷 우리 가족 사진 퍼즐</h3>
+        <div class="custom-puzzle">
+          <div class="cp-preview" id="cpPreview" aria-hidden="true"></div>
+          <div class="cp-actions">
+            <label class="fmk-btn fmk-btn--sky" for="cpFile"><span aria-hidden="true">📁</span> 사진 고르기</label>
+            <input type="file" id="cpFile" accept="image/*" hidden />
+            <button class="fmk-btn" id="cpClear" type="button" hidden><span aria-hidden="true">🗑️</span> 사진 지우기</button>
+          </div>
+          <p class="dash-hint" id="cpInfo"></p>
+        </div>
+      </div>
+
+      <!-- 기록 백업 / 불러오기 (기기 변경·쿠키 삭제 대비) -->
+      <div class="dash-section dash-backup">
+        <h3 class="dash-title">💾 기록 보관하기</h3>
+        <div class="backup-actions">
+          <button class="fmk-btn fmk-btn--sky" id="btnBackup" type="button"><span aria-hidden="true">⬇️</span> 기록 백업</button>
+          <label class="fmk-btn fmk-btn--mint" for="fileRestore"><span aria-hidden="true">⬆️</span> 기록 불러오기</label>
+          <input type="file" id="fileRestore" accept="application/json,.json" hidden />
+        </div>
+        <p class="dash-hint">백업 파일(.json)을 저장해 두면 기기를 바꿔도 아이의 기록을 지킬 수 있어요.</p>
+      </div>
+
+      <button class="ach-reset" id="achReset" type="button">🗑️ 이 아이 기록 지우기</button>
+    </div>
+  </div>
+
+  <!-- ⚙️ 설정 모달 — 소리 / 전체화면 -->
+  <div class="ach-modal" id="settingsModal" hidden>
+    <div class="ach-modal-card settings-card" role="dialog" aria-modal="true" aria-label="설정">
+      <button class="ach-close" id="settingsClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="ach-modal-title">⚙️ 설정</h2>
+
+      <button class="settings-row" id="soundToggle" type="button" role="switch" aria-checked="true">
+        <span class="settings-label"><span class="settings-ico" aria-hidden="true">🔊</span> 소리 (효과음)</span>
+        <span class="settings-switch"><span class="settings-knob"></span></span>
+        <span class="settings-state" id="soundState">켜짐</span>
+      </button>
+
+      <button class="settings-row" id="fsToggle" type="button" role="switch" aria-checked="false">
+        <span class="settings-label"><span class="settings-ico" aria-hidden="true">⛶</span> 전체화면</span>
+        <span class="settings-switch"><span class="settings-knob"></span></span>
+        <span class="settings-state" id="fsState">꺼짐</span>
+      </button>
+
+      <p class="settings-hint">소리 설정은 모든 게임에 함께 적용돼요. 전체화면은 게임으로 이동하면 풀릴 수 있어요.</p>
+    </div>
+  </div>
+
+  <!-- 🎨 내 프로필 모달 — 아바타 / 테마색 -->
+  <div class="ach-modal" id="profileModal" hidden>
+    <div class="ach-modal-card profile-card" role="dialog" aria-modal="true" aria-label="내 프로필">
+      <button class="ach-close" id="profileClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="ach-modal-title">🎨 내 프로필</h2>
+      <h3 class="profile-sub">이름</h3>
+      <input class="ps-name-input" id="profileName" type="text" maxlength="12" placeholder="이름 (예: 서아)" aria-label="이름" />
+      <h3 class="profile-sub">친구를 골라요</h3>
+      <div class="profile-grid" id="avatarGrid"></div>
+      <h3 class="profile-sub">좋아하는 색을 골라요</h3>
+      <div class="color-grid" id="colorGrid"></div>
+      <button class="fmk-btn ps-switch" id="switchProfileBtn" type="button"><span aria-hidden="true">🔄</span> 다른 친구 / ➕ 새 친구</button>
+    </div>
+  </div>
+
+  <!-- ⏰ 스크린 타임 잠금 — 런처에서 게임 진입 차단 시(닫기로 부모님이 조절 가능) -->
+  <div class="ach-modal" id="screenLockModal" hidden>
+    <div class="ach-modal-card screenlock-card" role="dialog" aria-modal="true" aria-label="오늘의 플레이 시간 종료">
+      <button class="ach-close" id="screenLockClose" type="button" aria-label="닫기">✕</button>
+      <div class="screenlock-emoji" aria-hidden="true">👋</div>
+      <h2 class="ach-modal-title">오늘은 여기까지!</h2>
+      <p class="profile-sub">다음에 또 만나요 😊<br/>내일 다시 신나게 놀 수 있어요!</p>
+      <p class="dash-hint">부모님은 <b>부모님 방 → 플레이 시간</b>에서 시간을 조절할 수 있어요.</p>
+    </div>
+  </div>
+
+  <!-- 🌈 '누가 놀까요?' 프로필 선택 화면 — activeProfileId 가 없으면 자동으로 뜸 -->
+  <div class="ach-modal" id="profileSelectModal" hidden>
+    <div class="ach-modal-card profile-select-card" role="dialog" aria-modal="true" aria-label="누가 놀까요?">
+      <button class="ach-close" id="profileSelectClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="ach-modal-title">🌈 누가 놀까요?</h2>
+
+      <!-- 기존 프로필 목록 + '새 친구' 카드 -->
+      <div class="ps-list" id="psList"></div>
+
+      <!-- 새 친구 만들기 폼(처음엔 숨김) -->
+      <div class="ps-create" id="psCreate" hidden>
+        <h3 class="profile-sub">이름을 적어요</h3>
+        <input class="ps-name-input" id="psName" type="text" maxlength="12" placeholder="이름 (예: 서아)" aria-label="새 친구 이름" />
+        <h3 class="profile-sub">친구를 골라요</h3>
+        <div class="profile-grid" id="psAvatarGrid"></div>
+        <h3 class="profile-sub">좋아하는 색을 골라요</h3>
+        <div class="color-grid" id="psColorGrid"></div>
+        <div class="ps-create-actions">
+          <button class="fmk-btn fmk-btn--mint" id="psCreateConfirm" type="button"><span aria-hidden="true">✨</span> 시작하기</button>
+          <button class="fmk-btn" id="psCreateCancel" type="button">취소</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/launcher/main.js"></script>
+</body>
+</html>

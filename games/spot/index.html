@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#fff0d6" />
+  <title>틀린그림찾기 🔍</title>
+
+  <!-- 귀여운 폰트 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- 플랫폼 공통 Storybook 테마 -->
+  <link rel="stylesheet" href="../../shared/theme.css" />
+  <!-- 게임 전용 스타일 -->
+  <link rel="stylesheet" href="spot.css" />
+</head>
+
+<body class="fmk-reset spot-body">
+  <!-- 🏠 홈으로 (플랫폼 메인 런처로) — 좌상단 공통 버튼 -->
+  <a class="fmk-home-btn" href="../../index.html" aria-label="홈으로 — 게임 고르기로 돌아가기">
+    <span class="fmk-home-emoji" aria-hidden="true">🏠</span>
+    <span class="fmk-home-text">홈</span>
+  </a>
+
+  <!-- 상단 HUD (남은 시간 · 찾은 개수 · 콤보) -->
+  <div id="hud" class="spot-hud" aria-hidden="false">
+    <div class="hud-pill" id="timePill" title="남은 시간">
+      <span class="hud-icon" aria-hidden="true">⏰</span>
+      <span id="timeValue" class="hud-value">0</span>
+    </div>
+    <div class="hud-pill" id="foundPill" title="찾은 개수">
+      <span class="hud-icon" aria-hidden="true">🔍</span>
+      <span id="foundValue" class="hud-value">0/0</span>
+    </div>
+    <div class="hud-pill hud-pill--combo is-hidden" id="comboPill" title="콤보">
+      <span class="hud-icon" aria-hidden="true">🔥</span>
+      <span id="comboValue" class="hud-value">0</span>
+    </div>
+    <button class="hud-pill hud-pill--hint" id="btnHint" type="button" title="힌트 — 다른 곳 한 군데 알려줘요" aria-label="힌트 보기">
+      <span class="hud-icon" aria-hidden="true">💡</span>
+      <span class="hud-value">힌트</span>
+    </button>
+  </div>
+
+  <!-- 게임판: 같은 사진 두 장(B 에만 다른 곳이 숨어 있음). 캔버스 + 마커 오버레이. -->
+  <main id="board" class="spot-board" aria-hidden="true">
+    <section class="spot-pane" id="paneA" aria-label="첫 번째 그림">
+      <div class="spot-stage" id="stageA">
+        <canvas class="spot-canvas" id="canvasA"></canvas>
+        <div class="spot-marks" id="marksA" aria-hidden="true"></div>
+      </div>
+    </section>
+    <div class="spot-divider" aria-hidden="true">
+      <span class="spot-divider-dot">🔍</span>
+    </div>
+    <section class="spot-pane" id="paneB" aria-label="두 번째 그림 — 다른 곳이 숨어 있어요">
+      <div class="spot-stage" id="stageB">
+        <canvas class="spot-canvas" id="canvasB"></canvas>
+        <div class="spot-marks" id="marksB" aria-hidden="true"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 화면 중앙 토스트(콤보/격려) -->
+  <div id="toast" class="spot-toast" aria-live="polite"></div>
+
+  <!-- 시작(난이도 선택) 화면 -->
+  <div id="startScreen" class="screen is-open">
+    <div class="screen-card">
+      <div class="screen-emoji floaty-emoji" aria-hidden="true">🔍</div>
+      <h1 class="screen-title">틀린그림찾기</h1>
+      <div class="how-to" aria-hidden="false">
+        <div class="how-row"><span class="how-keys">🖼️ 🆚 🖼️</span><span class="how-text">두 그림을 비교해요</span></div>
+        <div class="how-row"><span class="how-keys">👆 ⭕</span><span class="how-text">다른 곳을 콕 눌러요</span></div>
+        <div class="how-row"><span class="how-keys">⏰ 🔥</span><span class="how-text">시간 안에 다 찾으면 승리!</span></div>
+      </div>
+      <p class="diff-label">난이도를 골라요</p>
+      <div class="diff-row">
+        <button class="diff-btn" id="btnEasy" type="button" data-level="1">
+          <span class="diff-emoji" aria-hidden="true">🐥</span>
+          <span class="diff-name">쉬움</span>
+          <span class="diff-sub">차이 3개</span>
+        </button>
+        <button class="diff-btn" id="btnNormal" type="button" data-level="2">
+          <span class="diff-emoji" aria-hidden="true">🦄</span>
+          <span class="diff-name">보통</span>
+          <span class="diff-sub">차이 4개</span>
+        </button>
+        <button class="diff-btn" id="btnHard" type="button" data-level="3">
+          <span class="diff-emoji" aria-hidden="true">🔥</span>
+          <span class="diff-name">어려움</span>
+          <span class="diff-sub">차이 5개</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과(승리/시간초과) 화면 -->
+  <div id="overScreen" class="screen">
+    <div class="screen-card">
+      <div class="screen-emoji" id="overEmoji" aria-hidden="true">🎉</div>
+      <h2 class="screen-title" id="overTitle">우와! 다 찾았다!</h2>
+      <p class="over-msg" id="overMsg">대단한 눈썰미야! 🔍✨</p>
+      <div class="over-scores">
+        <div class="over-score">
+          <div class="over-score-label">이번 점수</div>
+          <div class="over-score-value" id="finalScore">0</div>
+        </div>
+        <div class="over-score">
+          <div class="over-score-label">최고 점수</div>
+          <div class="over-score-value over-score-value--best" id="bestScore">0</div>
+        </div>
+      </div>
+      <!-- 이번 판에 새로 딴 칭찬 도장(업적) -->
+      <div id="newAchieves" class="new-achieves is-hidden"></div>
+      <div class="over-btns">
+        <button class="fmk-btn fmk-btn--mint big-start" id="btnRetry" type="button">
+          <span aria-hidden="true">🔄</span> 다시하기
+        </button>
+        <button class="fmk-btn fmk-btn--sky big-start" id="btnChangeDiff" type="button">
+          <span aria-hidden="true">🎚️</span> 난이도 바꾸기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./spot.js"></script>
+</body>
+</html>

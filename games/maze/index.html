@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#e6dcff" />
+  <title>동화책 미로 탈출 🐱</title>
+
+  <!-- 귀여운 폰트 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- 플랫폼 공통 Storybook 테마 -->
+  <link rel="stylesheet" href="../../shared/theme.css" />
+  <!-- 게임 전용 스타일 -->
+  <link rel="stylesheet" href="maze.css" />
+</head>
+
+<body class="fmk-reset maze-body">
+  <!-- 🏠 홈으로 (플랫폼 메인 런처로) — 좌상단 공통 버튼 -->
+  <a class="fmk-home-btn" href="../../index.html" aria-label="홈으로 — 게임 고르기로 돌아가기">
+    <span class="fmk-home-emoji" aria-hidden="true">🏠</span>
+    <span class="fmk-home-text">홈</span>
+  </a>
+
+  <!-- 상단 정보 (난이도 · 타이머 · 별) -->
+  <div id="hud" class="hud is-hidden" aria-hidden="true">
+    <div class="hud-pill" title="난이도">
+      <span class="hud-icon" id="lvIcon" aria-hidden="true">🐥</span>
+      <span id="lvLabel" class="hud-value">쉬움</span>
+    </div>
+    <div class="hud-pill" title="걸린 시간">
+      <span class="hud-icon" aria-hidden="true">⏱️</span>
+      <span id="timeLabel" class="hud-value">0:00</span>
+    </div>
+    <div class="hud-pill" title="모은 별">
+      <span class="hud-icon" aria-hidden="true">⭐</span>
+      <span id="starLabel" class="hud-value">0</span>
+    </div>
+  </div>
+
+  <!-- 미로 캔버스 -->
+  <canvas id="maze" aria-label="동화책 미로 탈출 게임 화면"></canvas>
+
+  <!-- 가상 D-패드 (모바일/데스크톱 공용) -->
+  <div id="dpad" class="dpad is-hidden" aria-hidden="true">
+    <button class="dpad-btn dpad-up"    id="btnUp"    type="button" aria-label="위로 이동">⬆️</button>
+    <button class="dpad-btn dpad-left"  id="btnLeft"  type="button" aria-label="왼쪽으로 이동">⬅️</button>
+    <button class="dpad-btn dpad-right" id="btnRight" type="button" aria-label="오른쪽으로 이동">➡️</button>
+    <button class="dpad-btn dpad-down"  id="btnDown"  type="button" aria-label="아래로 이동">⬇️</button>
+  </div>
+
+  <!-- 시작(난이도 선택) 화면 -->
+  <div id="startScreen" class="screen is-open">
+    <div class="screen-card">
+      <div class="screen-emoji floaty-emoji" aria-hidden="true">🐱</div>
+      <h1 class="screen-title">동화책 미로 탈출</h1>
+      <p class="how-line">🐱 아기 고양이를 🐟 생선까지 데려가요!</p>
+      <div class="level-grid">
+        <button class="level-btn level-btn--peach" data-level="1" type="button">
+          <span class="level-emoji" aria-hidden="true">🐣</span>
+          <span class="level-name">연습</span>
+          <span class="level-size">3×3</span>
+        </button>
+        <button class="level-btn level-btn--cream" data-level="2" type="button">
+          <span class="level-emoji" aria-hidden="true">🐥</span>
+          <span class="level-name">쉬움</span>
+          <span class="level-size">5×5</span>
+        </button>
+        <button class="level-btn level-btn--lilac" data-level="3" type="button">
+          <span class="level-emoji" aria-hidden="true">🦄</span>
+          <span class="level-name">보통</span>
+          <span class="level-size">7×7</span>
+        </button>
+        <button class="level-btn level-btn--mint" data-level="4" type="button">
+          <span class="level-emoji" aria-hidden="true">👑</span>
+          <span class="level-name">도전</span>
+          <span class="level-size">9×9</span>
+        </button>
+        <button class="level-btn level-btn--lava" data-level="5" type="button">
+          <span class="level-emoji" aria-hidden="true">🌋</span>
+          <span class="level-name">불타는 미로</span>
+          <span class="level-size">13×13</span>
+        </button>
+        <button class="level-btn level-btn--space" data-level="6" type="button">
+          <span class="level-emoji" aria-hidden="true">🌌</span>
+          <span class="level-name">우주 미로</span>
+          <span class="level-size">17×17</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 승리 화면 -->
+  <div id="winScreen" class="screen">
+    <div class="screen-card">
+      <div class="screen-emoji" aria-hidden="true">🎉</div>
+      <h2 class="screen-title">탈출 성공! 🎉</h2>
+      <div class="win-stats">
+        <div class="win-stat">
+          <div class="win-stat-label">걸린 시간</div>
+          <div class="win-stat-value" id="winTime">0:00</div>
+        </div>
+        <div class="win-stat">
+          <div class="win-stat-label">모은 별</div>
+          <div class="win-stat-value win-stat-value--star" id="winStars">⭐ 0</div>
+        </div>
+      </div>
+      <!-- 이번 판에 새로 딴 칭찬 도장(업적) -->
+      <div id="newAchieves" class="new-achieves is-hidden"></div>
+      <div class="win-actions">
+        <button class="fmk-btn fmk-btn--mint big-start" id="btnReplay" type="button">
+          <span aria-hidden="true">🔄</span> 다시하기
+        </button>
+        <button class="fmk-btn fmk-btn--sky big-start" id="btnChoose" type="button">
+          <span aria-hidden="true">🗺️</span> 다른 난이도
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./maze.js"></script>
+</body>
+</html>

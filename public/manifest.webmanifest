@@ -1,0 +1,15 @@
+{
+  "name": "ForMyKids 놀이터",
+  "short_name": "ForMyKids",
+  "description": "7~8세를 위한 통합 게임 놀이터",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff0f7",
+  "theme_color": "#ffe3f1",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

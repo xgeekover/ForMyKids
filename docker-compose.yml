@@ -1,0 +1,63 @@
+# ForMyKids v1.3.0 — 홈 서버 (frontend + backend). 배포는 '이미지 기반'(로컬 빌드 → 전송).
+#   로컬 개발:   docker compose up -d --build   → http://localhost:8080
+#   원격 배포:   npm run deploy  (로컬 build → docker save|ssh docker load → 원격 docker compose up -d)
+#   원격에선 전송받은 image(formykids-backend/frontend:latest)를 그대로 사용(빌드하지 않음).
+#
+# ⚠️ 데이터베이스: 별도의 MariaDB 컨테이너를 띄우지 않는다.
+#    원격 서버의 도커에 '이미 떠 있는 MariaDB 컨테이너(NAMES: mariadb-server)'를 재사용해
+#    전용 DB('formykids')에 기록한다. (영속화는 그 MariaDB 컨테이너가 담당)
+#    접속 정보는 아래 backend.environment 또는 같은 폴더의 .env 로 주입한다(.env 가 우선).
+#
+#    ▶ 접속 방법(기본 = B, 컨테이너 간 직접 통신):
+#      (B·기본) 같은 도커 네트워크에서 컨테이너 이름으로 접속:  DB_HOST=mariadb-server  DB_PORT=3306
+#               → backend 가 외부 네트워크 'mariadb_net'(= mariadb_default)에 참여한다.
+#                 네트워크 이름이 다르면 .env 의 MARIADB_NETWORK 로 바꾸세요.
+#                 확인: docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' mariadb-server
+#      (A·대안) 호스트 게시 포트로 접속:  .env 에 DB_HOST=<원격서버 IP>  DB_PORT=3336 (또는 host.docker.internal)
+services:
+  # Express 동기화 API — /api/sync. 외부 MariaDB 에 동기화 payload 적재.
+  backend:
+    image: formykids-backend:latest   # 로컬에서 빌드·태깅 → 원격엔 이미지로 전송(원격 빌드 X)
+    build: ./backend                  # 로컬 `docker compose build` 시 위 image 태그로 빌드
+    restart: unless-stopped
+    environment:
+      # 외부 MariaDB(컨테이너 mariadb-server) 접속. 비밀번호는 .env 에서 주입(파일에 하드코딩하지 않음).
+      DB_HOST: "${DB_HOST:-mariadb-server}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_USER: "${DB_USER:-fmk_user}"
+      DB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD 를 .env 에 설정하세요 (cp .env.example .env)}"
+      DB_NAME: "${DB_NAME:-formykids}"
+      PORT: "3000"
+    # (대안 A) 컨테이너→호스트 접속이 필요하면 .env 에서 DB_HOST=host.docker.internal 로 바꿔 쓰세요.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 백엔드가 떠서 /api/health 에 응답하면 healthy → 그 다음에 frontend(nginx) 기동
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks:
+      - fmk_net
+      - mariadb_net   # mariadb-server 와 같은 외부 네트워크에 참여 → 컨테이너 이름(mariadb-server:3306)으로 직접 통신
+
+  # Nginx 정적 호스팅(빌드된 dist) + /api → backend 프록시
+  frontend:
+    image: formykids-frontend:latest  # 로컬에서 빌드·태깅 → 원격엔 이미지로 전송(원격 빌드 X)
+    build: .                          # 로컬 `docker compose build` 시 위 image 태그로 빌드
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy  # 백엔드가 응답 가능해진 뒤 기동(초기 /api 502 방지)
+    networks: [fmk_net]
+
+networks:
+  fmk_net:
+    driver: bridge
+  # mariadb-server 가 속한 기존(외부) 도커 네트워크. 기본 mariadb_default — .env 의 MARIADB_NETWORK 로 변경.
+  mariadb_net:
+    external: true
+    name: "${MARIADB_NETWORK:-mariadb_default}"

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#e6dcff" />
+  <title>우주선 똥 피하기 🚀</title>
+
+  <!-- 귀여운 폰트 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- 플랫폼 공통 Storybook 테마 -->
+  <link rel="stylesheet" href="../../shared/theme.css" />
+  <!-- 게임 전용 스타일 -->
+  <link rel="stylesheet" href="dodge.css" />
+</head>
+
+<body class="fmk-reset dodge-body">
+  <!-- 🏠 홈으로 (플랫폼 메인 런처로) — 좌상단 공통 버튼 -->
+  <a class="fmk-home-btn" href="../../index.html" aria-label="홈으로 — 게임 고르기로 돌아가기">
+    <span class="fmk-home-emoji" aria-hidden="true">🏠</span>
+    <span class="fmk-home-text">홈</span>
+  </a>
+
+  <!-- 게임 캔버스 -->
+  <canvas id="game" aria-label="우주선 똥 피하기 게임 화면"></canvas>
+
+  <!-- 상단 정보 (점수 · 진화 단계 · 보호막) -->
+  <div id="hud" class="hud" aria-hidden="false">
+    <div class="hud-pill" title="점수">
+      <span class="hud-icon" aria-hidden="true">⭐</span>
+      <span id="score" class="hud-value">0</span>
+    </div>
+    <div class="hud-pill" id="stagePill" title="우주선 진화 단계">
+      <span class="hud-icon" aria-hidden="true">🚀</span>
+      <span id="stageLabel" class="hud-value">Lv.1</span>
+    </div>
+    <div class="hud-pill hud-pill--shield is-hidden" id="shieldPill" title="보호막 (1회 방어)">
+      <span class="hud-icon" aria-hidden="true">🛡️</span>
+    </div>
+  </div>
+
+  <!-- 모바일 터치 조작 버튼 (좌/우) — 데스크톱에서도 클릭 가능 -->
+  <div id="touch" class="touch-controls" aria-hidden="false">
+    <button class="touch-btn" id="btnLeft" type="button" aria-label="왼쪽으로 이동">⬅️</button>
+    <button class="touch-btn" id="btnRight" type="button" aria-label="오른쪽으로 이동">➡️</button>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="startScreen" class="screen is-open">
+    <div class="screen-card">
+      <div class="screen-emoji floaty-emoji" aria-hidden="true">🚀</div>
+      <h1 class="screen-title">우주선 똥 피하기</h1>
+      <div class="how-to" aria-hidden="false">
+        <div class="how-row"><span class="how-keys">⬅️ ➡️</span><span class="how-text">움직여요</span></div>
+        <div class="how-row"><span class="how-avoid">💩 🍌 ☄️</span><span class="how-text">피해요!</span></div>
+        <div class="how-row"><span class="how-get">🛡️</span><span class="how-text">먹으면 한 번 막아줘요</span></div>
+      </div>
+      <button class="fmk-btn fmk-btn--mint big-start" id="btnStart" type="button">
+        <span aria-hidden="true">🎮</span> 시작하기
+      </button>
+    </div>
+  </div>
+
+  <!-- 게임 오버 화면 -->
+  <div id="overScreen" class="screen">
+    <div class="screen-card">
+      <div class="screen-emoji" id="overEmoji" aria-hidden="true">💫</div>
+      <h2 class="screen-title screen-title--over">아차차!</h2>
+      <p class="over-msg">다시 도전해서<br/>우주선을 진화시켜볼까? 🚀✨</p>
+      <div class="over-scores">
+        <div class="over-score">
+          <div class="over-score-label">이번 점수</div>
+          <div class="over-score-value" id="finalScore">0</div>
+        </div>
+        <div class="over-score">
+          <div class="over-score-label">최고 점수</div>
+          <div class="over-score-value over-score-value--best" id="bestScore">0</div>
+        </div>
+      </div>
+      <!-- 이번 판에 새로 딴 칭찬 도장(업적) -->
+      <div id="newAchieves" class="new-achieves is-hidden"></div>
+      <button class="fmk-btn big-start" id="btnRetry" type="button">
+        <span aria-hidden="true">🔄</span> 다시하기
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="./dodge.js"></script>
+</body>
+</html>
