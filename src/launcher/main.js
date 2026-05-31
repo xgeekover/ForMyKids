@@ -892,6 +892,9 @@ function updateSyncBadge(status) {
   if (badge) badge.dataset.status = st
   if (dot) dot.textContent = SYNC_BADGE[st].dot
   if (label) label.textContent = SYNC_BADGE[st].label
+  // 오프라인일 때만 부드러운 안내 노출(온라인 복귀 시 자동 동기화 — 비행기 모드 안심)
+  const note = $('syncNote')
+  if (note) note.hidden = (st !== 'offline')
 }
 
 // ───────────────────────── 📱 PWA 설치 유도(홈 화면에 추가) ─────────────────────────

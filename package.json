@@ -14,11 +14,12 @@
     "test:dashboard": "node shared/fmk-dashboard.test.mjs",
     "test:coop": "node shared/fmk-coop.test.mjs",
     "test:passport": "node shared/fmk-passport.test.mjs",
+    "test:pwa": "node tests/pwa.test.mjs",
     "test:maze": "node games/maze/maze-logic.test.mjs",
     "test:spot": "node games/spot/spot-logic.test.mjs",
     "test:puzzle": "node games/puzzle/puzzle-logic.test.mjs",
     "test:memory": "node games/memory/src/gameLogic.test.mjs",
-    "test": "node shared/fmk-store.test.mjs && node shared/fmk-sound.test.mjs && node shared/fmk-syncqueue.test.mjs && node shared/fmk-dashboard.test.mjs && node shared/fmk-coop.test.mjs && node shared/fmk-passport.test.mjs && node games/maze/maze-logic.test.mjs && node games/spot/spot-logic.test.mjs && node games/puzzle/puzzle-logic.test.mjs && node games/memory/src/gameLogic.test.mjs",
+    "test": "node shared/fmk-store.test.mjs && node shared/fmk-sound.test.mjs && node shared/fmk-syncqueue.test.mjs && node shared/fmk-dashboard.test.mjs && node shared/fmk-coop.test.mjs && node shared/fmk-passport.test.mjs && node tests/pwa.test.mjs && node games/maze/maze-logic.test.mjs && node games/spot/spot-logic.test.mjs && node games/puzzle/puzzle-logic.test.mjs && node games/memory/src/gameLogic.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "deploy": "bash deploy.sh"

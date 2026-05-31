@@ -12,9 +12,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
 
   <!-- PWA: 설치/오프라인 (public/ 자산은 %BASE_URL% 로 참조) -->
-  <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+  <link rel="manifest" href="%BASE_URL%manifest.json" />
   <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
-  <link rel="apple-touch-icon" href="%BASE_URL%icon.svg" />
+  <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
+  <!-- 홈 화면 설치 시 '진짜 앱처럼' 단독 실행(주소창 없이) — iOS/Android 공통 -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="추억놀이터" />
+  <meta name="application-name" content="추억놀이터" />
 
   <!-- 플랫폼 공통 Storybook 테마 -->
   <link rel="stylesheet" href="shared/theme.css" />
@@ -401,6 +407,7 @@
     .sync-badge[data-status="syncing"] .sync-dot { animation: syncPulse 1s ease-in-out infinite; }
     @keyframes syncPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
     @media (max-width: 420px) { .sync-badge .sync-label { display: none; } .sync-badge { right: 60px; padding: 6px; } }
+    .sync-note { margin: 6px 0 14px; padding: 8px 12px; border-radius: 12px; background: #fdf2ec; color: #9a6a4a; font-size: clamp(.82rem, 3.4vw, .96rem); line-height: 1.45; box-shadow: inset 0 0 0 1.5px rgba(210,150,110,.28); text-align: center; }
     .dash-section { margin-bottom: 18px; }
     .dash-title { font-size: clamp(1.05rem, 4.4vw, 1.25rem); color: #8a5cc7; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
     .dash-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
@@ -797,6 +804,8 @@
         <span class="sync-dot" id="syncDot" aria-hidden="true">🔴</span>
         <span class="sync-label" id="syncLabel">오프라인</span>
       </div>
+      <!-- 오프라인일 때만: 부드러운 안내(비행기 모드에서도 기록은 안전하게 보관됨) -->
+      <p class="sync-note" id="syncNote" role="status" hidden>📴 오프라인 모드로 놀고 있어요 — 인터넷이 연결되면 기록이 자동으로 저장돼요.</p>
       <h2 class="ach-modal-title">👪 부모님 방</h2>
       <!-- 아이별 탭 — 탭을 누르면 해당 아이의 통계/도장으로 전환 -->
       <div class="child-tabs" id="childTabs" role="tablist" aria-label="아이 선택"></div>
