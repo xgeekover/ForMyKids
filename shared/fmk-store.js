@@ -268,6 +268,9 @@ function normProfile(p) {
       .map((x) => ({ t: x.t.slice(0, 32), at: Math.max(0, Math.floor(num(x.at) || 0)) }))
       .slice(-400);
   }
+  // 환생(Prestige) 레벨 — 여권 한 권(16칸)을 채울 때마다 +1 (테마 단계: 초록→파랑→빨강→금색).
+  const plv = num(src.passportLevel);
+  const passportLevel = (plv !== undefined && plv >= 0) ? Math.min(Math.floor(plv), 9999) : 0;
 
   return {
     id: (typeof src.id === 'string' && src.id.trim()) ? src.id.trim().slice(0, 64) : genId(),
@@ -284,6 +287,7 @@ function normProfile(p) {
     screen,
     days,
     passport,
+    passportLevel,
   };
 }
 
@@ -745,8 +749,31 @@ export const PASSPORT_KINDS = [
 ];
 const _KIND_BY_ID = Object.fromEntries(PASSPORT_KINDS.map((k) => [k.id, k]));
 
+// 여권 한 권의 칸 수. 다 채우면 환생(Prestige) → 새 여권 + 레벨업.
+export const PASSPORT_SIZE = 16;
+// 환생 테마(레벨 단계). 마지막(금색)에서 더 올라가도 금색 유지하되 레벨은 계속 증가.
+export const PASSPORT_THEMES = [
+  { id: 'green', label: '초록 여권', ring: '#5cc36a', bg1: '#eafbe9', bg2: '#cdeccd' },
+  { id: 'blue', label: '파랑 여권', ring: '#3a8dff', bg1: '#e7f1ff', bg2: '#cfe2ff' },
+  { id: 'red', label: '빨강 여권', ring: '#ff5d6c', bg1: '#ffe9ec', bg2: '#ffd0d6' },
+  { id: 'gold', label: '금색 여권', ring: '#e2b400', bg1: '#fff8e0', bg2: '#ffeeae' },
+];
+function _themeForLevel(level) {
+  const i = Math.min(Math.max(0, Math.floor(level) || 0), PASSPORT_THEMES.length - 1);
+  return PASSPORT_THEMES[i];
+}
+
 /** 여권 스탬프 카탈로그(복사본). */
 export function getPassportKinds() { return PASSPORT_KINDS.map((k) => ({ ...k })); }
+/** 한 프로필의 환생 레벨(0=초록…). */
+export function getPassportLevel(profileId) {
+  return Math.max(0, Math.floor(_readProfile(getState(), profileId).passportLevel || 0));
+}
+/** 한 프로필의 현재 여권 테마({id,label,ring,bg1,bg2}) + 레벨. */
+export function getPassportTheme(profileId) {
+  const level = getPassportLevel(profileId);
+  return { ...(_themeForLevel(level)), level, size: PASSPORT_SIZE };
+}
 
 /**
  * 게임 클리어 보상으로 무작위 여권 스탬프를 지급한다.
@@ -781,13 +808,38 @@ export function awardPassportStamp(opts = {}) {
     : PASSPORT_KINDS[Math.floor(Math.random() * PASSPORT_KINDS.length)];
   const at = Date.now();
   // 참여자 모두에게 '같은 스탬프 1개씩' (Co-op 이중 지급 방지 — 각 프로필에 정확히 1개)
+  const fullProfileIds = [];
   profs.forEach((p) => {
     if (!Array.isArray(p.passport)) p.passport = [];
     p.passport.push({ t: kind.id, at });
-    if (p.passport.length > 400) p.passport.splice(0, p.passport.length - 400); // 무한 성장 방지
+    if (p.passport.length > 400) p.passport.splice(0, p.passport.length - 400); // 무한 성장 방지(이론상 환생 전엔 16 이하)
+    if (p.passport.length >= PASSPORT_SIZE) fullProfileIds.push(p.id); // 16칸 다 채움 → 환생 보상 대상
   });
   saveState(s); // → scheduleSync → 오프라인이면 IndexedDB 큐로 영속(비행기 모드 안전)
-  return { kind: { id: kind.id, emoji: kind.emoji, name: kind.name }, at, profileIds: profs.map((p) => p.id), coop: profs.length > 1 };
+  return {
+    kind: { id: kind.id, emoji: kind.emoji, name: kind.name }, at,
+    profileIds: profs.map((p) => p.id), coop: profs.length > 1,
+    full: fullProfileIds.length > 0, fullProfileIds, // 여권 완성(환생 보상 트리거)
+  };
+}
+
+/**
+ * 환생(Prestige): 지정 프로필들의 여권을 비우고 레벨 +1 (테마 단계 상승). 보상 팝업 '확인' 시 호출.
+ * 16칸을 채운 프로필에만 적용 — 정확히 한 번만 초기화되도록 호출측(연출)에서 1회 호출한다.
+ * @returns {Array<{id, level, theme}>} 환생한 프로필 요약
+ */
+export function prestigePassport(profileIds) {
+  const s = getState();
+  const ids = Array.isArray(profileIds) ? profileIds : (profileIds ? [profileIds] : null);
+  const targets = (ids ? s.profiles.filter((p) => ids.includes(p.id)) : [_findProfile(s)]).filter(Boolean);
+  const out = [];
+  for (const p of targets) {
+    p.passport = [];                                   // 새 여권(0칸)으로 초기화
+    p.passportLevel = Math.max(0, Math.floor(p.passportLevel || 0)) + 1; // 레벨업
+    out.push({ id: p.id, level: p.passportLevel, theme: _themeForLevel(p.passportLevel).id });
+  }
+  if (out.length) saveState(s);
+  return out;
 }
 
 /** 한 프로필의 여권 스탬프 목록(획득 순). 각 항목 {type, at, emoji, name}. */
@@ -856,6 +908,9 @@ export function resetProfile(id) {
   p.games = freshGames();
   p.achievements = {};
   p.seen = {};
+  p.passport = [];        // 여권 스탬프도 '모든 기록' 에 포함 → 초기화(스테일 만권 여권의 보상 오발 방지)
+  p.passportLevel = 0;    // 환생 레벨도 초기화
+  p.days = {};            // 잔디 활동 기록도 초기화
   saveState(s);
   return true;
 }

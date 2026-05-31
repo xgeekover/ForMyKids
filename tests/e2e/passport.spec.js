@@ -24,6 +24,6 @@ test('내 여권: 스탬프가 없으면 안내 문구가 뜬다', async ({ page
   await page.goto('/')
   await page.locator('#passportChip').click()
   await expect(page.locator('#passportModal')).toBeVisible()
-  await expect(page.locator('#passportSub')).toContainText('아직 스탬프가 없어요')
+  await expect(page.locator('#passportSub')).toContainText('게임을 클리어하면')
   await expect(page.locator('#passportGrid .passport-slot.is-filled')).toHaveCount(0)
 })

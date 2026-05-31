@@ -32,6 +32,7 @@ import {
   clearCoop,
   getPassport,
   getPassportCount,
+  getPassportTheme,
   createProfile,
   // v1.3.0: 커스텀 퍼즐 + 스크린 타임
   setCustomPuzzleId,
@@ -575,8 +576,21 @@ function renderPassport() {
     }
   }
   grid.innerHTML = cells
+  // 환생 테마(레벨)로 여권 표지 색을 바꾼다(초록→파랑→빨강→금색)
+  const theme = getPassportTheme()
+  const card = grid.closest('.passport-card')
+  if (card) {
+    card.style.setProperty('--pp-ring', theme.ring)
+    card.style.setProperty('--pp-bg1', theme.bg1)
+    card.style.setProperty('--pp-bg2', theme.bg2)
+  }
   const sub = $('passportSub')
-  if (sub) sub.innerHTML = total > 0 ? `모은 스탬프 <b>${total}</b>개` : '아직 스탬프가 없어요. 게임을 클리어하면 받아요! ✈️'
+  if (sub) {
+    const lvLabel = theme.level > 0 ? ` · <b>${theme.label}</b> (Lv.${theme.level + 1})` : ''
+    sub.innerHTML = total > 0
+      ? `모은 스탬프 <b>${total}</b>/${theme.size}개${lvLabel}`
+      : `새 ${theme.label}! 게임을 클리어하면 스탬프를 받아요 ✈️`
+  }
   const nav = $('passportNav')
   if (nav) nav.hidden = pages <= 1
   const pageEl = $('passportPage')

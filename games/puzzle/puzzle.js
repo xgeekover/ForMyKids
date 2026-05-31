@@ -12,6 +12,7 @@ import { recordPlay, getGameStats } from '../../shared/fmk-store.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
 import { awardPassportStamp } from '../../shared/fmk-store.js' // 여권 스탬프 지급
 import { dropStamp } from '../../shared/fmk-stamp.js' // 여권 스탬프 '쾅!' 획득 연출
+import { openPhotoPicker } from '../../shared/fmk-photoinput.js' // 📸 내가 찍은 사진으로 만들기
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import { installGameGuard } from '../../shared/fmk-screentime.js'
 import * as sfx from '../../shared/fmk-sound.js'
@@ -161,6 +162,8 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   let total = 0;
   let hintOn = false;
   let customDataURL = null; // 가족 사진 dataURL(IndexedDB 에서 로드되면 채워짐)
+  let _cameraUrl = null;    // 📸 내가 찍은 사진(리사이즈된 objectURL)
+  let _cameraPhoto = null;  // { url, revoke } — 교체/언마운트 시 revoke
   let lastCustom = false;   // 마지막 시작이 가족 사진이었는지(다시하기용)
 
   // 보드 배치(논리 픽셀)
@@ -263,7 +266,11 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   // ---------- 게임 시작 ----------
   function startGame(lv, custom) {
     level = lv;
-    lastCustom = !!(custom && customDataURL); // 가족 사진 모드 여부
+    // custom: 'camera' → 내가 찍은 사진(_cameraUrl), true/'family' → 가족 사진(customDataURL), 그 외 → 기본 이미지
+    let directSrc = null;
+    if (custom === 'camera' && _cameraUrl) directSrc = _cameraUrl;
+    else if (custom && customDataURL) directSrc = customDataURL;
+    lastCustom = directSrc ? (custom === 'camera' ? 'camera' : true) : false;
     const def = LEVELS[lv] || LEVELS[1];
     cols = def.cols; rows = def.rows;
     total = cols * rows;
@@ -287,10 +294,10 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     updateHud();
     sfx.resume();
 
-    if (lastCustom) {
-      // 가족 사진: dataURL 을 바로 사용(네트워크 프로브 불필요, CORS 안전)
-      resolvedSrc = customDataURL;
-      boardPreview.style.backgroundImage = "url('" + customDataURL + "')";
+    if (directSrc) {
+      // 가족/카메라 사진: url 을 바로 사용(네트워크 프로브 불필요, CORS 안전)
+      resolvedSrc = directSrc;
+      boardPreview.style.backgroundImage = "url('" + directSrc + "')";
       buildBoard();
     } else {
       // 기본(명화/캐릭터): 이미지 해결 후 보드/조각 생성
@@ -328,6 +335,38 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     btn.addEventListener('click', () => startGame(1, true));
     wrap.appendChild(btn);
     // 시작 카드(.screen-card--start) 안, 카테고리 토글 위에 배치(카드 밖 오버레이에 떠 보이지 않도록)
+    const card = startScreen.querySelector('.screen-card--start') || startScreen;
+    if (catToggle && catToggle.parentNode === card) card.insertBefore(wrap, catToggle);
+    else card.insertBefore(wrap, card.firstChild);
+  }
+
+  // 📸 '내가 찍은 사진으로 만들기' — 시작 화면 버튼. 카메라/갤러리 → 리사이즈 → 그 사진으로 퍼즐 시작.
+  function addPhotoButton() {
+    if (!startScreen || document.getElementById('photoPuzzleBtn')) return;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'text-align:center;margin:0 0 14px';
+    const btn = document.createElement('button');
+    btn.id = 'photoPuzzleBtn';
+    btn.type = 'button';
+    btn.className = 'level-btn level-btn--puzzle';
+    btn.style.cssText = 'margin:0 auto;min-width:200px;background:linear-gradient(160deg,#cdefff,#9fd6ff);color:#1f5d86';
+    btn.innerHTML =
+      '<span class="level-emoji" aria-hidden="true">📸</span>' +
+      '<span class="level-name">내가 찍은 사진</span>' +
+      '<span class="level-size">16조각</span>';
+    btn.addEventListener('click', () => {
+      sfx.pop();
+      openPhotoPicker({
+        maxSize: 1024,
+        onReady: (r) => {
+          if (_cameraPhoto) { try { _cameraPhoto.revoke() } catch (e) {} } // 이전 사진 해제(누수 방지)
+          _cameraPhoto = r; _cameraUrl = r.url;
+          startGame(1, 'camera');
+        },
+        onError: () => {}, // 취소/실패 → 조용히 무시
+      });
+    });
+    wrap.appendChild(btn);
     const card = startScreen.querySelector('.screen-card--start') || startScreen;
     if (catToggle && catToggle.parentNode === card) card.insertBefore(wrap, catToggle);
     else card.insertBefore(wrap, card.firstChild);
@@ -743,9 +782,12 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   function init() {
     buildStartScreen();
     loadCustomPhoto(); // 가족 사진이 등록돼 있으면 시작 화면에 진입 버튼 추가(비동기)
+    addPhotoButton();  // 📸 내가 찍은 사진으로 만들기 버튼
 
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', resize);
+    // 언마운트(페이지 이탈) 시 카메라 사진 objectURL 해제(메모리 누수 방지)
+    window.addEventListener('pagehide', () => { if (_cameraPhoto) { try { _cameraPhoto.revoke() } catch (e) {} _cameraPhoto = null; _cameraUrl = null; } })
 
     btnHint.addEventListener('click', toggleHint);
     btnReplay.addEventListener('click', () => startGame(level, lastCustom));

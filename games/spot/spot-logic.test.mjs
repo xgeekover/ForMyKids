@@ -2,7 +2,7 @@
    '한 장의 사진' 방식: 이미지 목록 · 난이도 · 변형 스펙 생성(개수·범위·비겹침·종류) · 탭 판정. */
 import assert from 'node:assert/strict'
 import {
-  SPOT_IMAGES, DIFFS, DIFF_KINDS, STICKER_EMOJIS,
+  SPOT_IMAGES, DIFFS, DIFF_KINDS, DECAL_KINDS,
   buildDifferences, isHit, hitTest, pickSpotImage, spotImageById,
 } from './spot-logic.js'
 
@@ -39,9 +39,9 @@ for (let trial = 0; trial < 40; trial++) {
       assert.ok(s.cx > 0 && s.cx < 1 && s.cy > 0 && s.cy < 1, '중심 범위 내(0~1)')
       assert.ok(s.r > 0 && s.r < 0.2, '반경 합리적')
       assert.ok(DIFF_KINDS.includes(s.kind), '유효한 변형 종류')
-      if (s.kind === 'recolor') assert.ok(Number.isFinite(s.hue), 'recolor hue')
-      if (s.kind === 'erase') assert.ok(Number.isFinite(s.sxOff) && Number.isFinite(s.syOff), 'erase 오프셋')
-      if (s.kind === 'sticker') assert.ok(STICKER_EMOJIS.includes(s.emoji), 'sticker 이모지')
+      assert.ok(!['recolor', 'erase', 'sticker'].includes(s.kind), '옛 부자연스러운 종류(왜곡) 제거됨')
+      if (s.kind === 'hueshift') assert.ok(Number.isFinite(s.hue) && s.hue >= 50 && s.hue <= 310, 'hueshift hue 범위')
+      if (s.kind === 'decal') assert.ok(DECAL_KINDS.includes(s.decal), 'decal 종류(새/구름/나뭇잎/별)')
     }
     for (let i = 0; i < specs.length; i++) {
       for (let j = i + 1; j < specs.length; j++) {

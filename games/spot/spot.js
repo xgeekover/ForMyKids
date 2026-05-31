@@ -1,8 +1,9 @@
 /* ===================================================================
    틀린그림찾기 (Spot the Difference) — 한 장의 사진 기반
    -------------------------------------------------------------------
-   · 같은 이미지를 두 Canvas(A=원본, B=변형)에 그리고, B 에만 국소 변형을 N군데 생성.
-     변형: recolor(부위 색 바꿈) · erase(주변 복제로 지움) · flip(부위 좌우 뒤집기) · sticker(B에만 등장).
+   · 같은 이미지를 두 Canvas(A=원본, B=변형)에 그리고, B 에만 '자연스러운 변형'을 N군데 생성.
+     변형(부자연스러운 왜곡 제거): hueshift(색조만 자연스럽게) · flip(좌우 반전) · decal(작은 자연 요소 합성). 모두 경계 페더링.
+   · 📸 내가 찍은 사진(카메라/갤러리)도 장면으로 사용 가능(fmk-photoinput, 1024px 리사이즈).
    · 이미지/난이도/변형 스펙·탭 판정은 ./spot-logic.js (순수·테스트 가능).
    · 두 그림 중 어디를 눌러도 됨 → 정규화 좌표로 가장 가까운 미발견 변형 판정.
    · 이미지 로드 실패(오프라인 등)면 그라데이션+이모지 폴백 장면을 그려 그대로 플레이.
@@ -12,6 +13,7 @@ import { recordPlay, getGameStats } from '../../shared/fmk-store.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
 import { awardPassportStamp } from '../../shared/fmk-store.js' // 여권 스탬프 지급
 import { dropStamp } from '../../shared/fmk-stamp.js' // 여권 스탬프 '쾅!' 획득 연출
+import { openPhotoPicker } from '../../shared/fmk-photoinput.js' // 📸 내가 찍은 사진으로
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import { installGameGuard } from '../../shared/fmk-screentime.js'
 import { DIFFS, buildDifferences, hitTest, pickSpotImage } from './spot-logic.js'
@@ -69,6 +71,8 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   let markedIds = new Set(); // 이미 마커(동그라미)를 그린 정답 id — 재터치 시 애니메이션 반복 방어
   let imgTitle = '';
   let loadedImg = null;      // 로드된 Image(실패 시 null → 폴백)
+  let _customSpotUrl = null; // 📸 내가 찍은 사진(리사이즈된 objectURL)
+  let _customSpotPhoto = null; // { url, revoke } — 교체/언마운트 시 revoke
   let imgAspect = 1;         // 캔버스 종횡비(이미지 종횡비)
   let fbBg = ['#ffe3b0', '#ff9d3a'];
   let fbObjects = [];        // 폴백 장면 오브젝트(라운드 내 고정)
@@ -121,36 +125,90 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     }
   }
 
-  // ---------- B 캔버스에 변형 적용 ----------
-  function applyDiffs(ctx, W, H) {
+  // ---------- 자연스러운 변형 합성 헬퍼 ----------
+  // 변형된 '전체 장면'을 임시 캔버스에 그린 뒤, 부드러운 원형 알파 마스크로 영역만 페더링 합성한다
+  // (딱딱한 원형 clip 대신 가장자리를 부드럽게 → 경계가 티 안 남).
+  function featherComposite(ctx, W, H, cx, cy, R, dpr, renderFn) {
+    const d = dpr || 1;
+    const tmp = document.createElement('canvas');
+    tmp.width = Math.max(1, Math.round(W * d)); tmp.height = Math.max(1, Math.round(H * d)); // 디바이스 해상도(HiDPI 선명)
+    const t = tmp.getContext('2d');
+    if (!t) return;
+    t.setTransform(d, 0, 0, d, 0, 0); // 이후 CSS 좌표(cx,cy,R,W,H) 그대로 사용
+    renderFn(t);
+    t.globalCompositeOperation = 'destination-in';
+    const g = t.createRadialGradient(cx, cy, Math.max(1, R * 0.5), cx, cy, R * 1.18);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.72, 'rgba(0,0,0,0.9)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    t.fillStyle = g; t.fillRect(0, 0, W, H);
+    ctx.drawImage(tmp, 0, 0, W, H); // ctx 는 dpr 스케일 → device px 1:1 매핑(선명)
+  }
+  // 변형 자리의 배경 밝기(0~255) — decal 색을 배경에 맞춰 고르기 위해. tainted/실패 시 중간값.
+  function avgBrightness(ctx, cx, cy, dpr) {
+    try {
+      const x = Math.max(0, Math.round(cx * dpr)), y = Math.max(0, Math.round(cy * dpr));
+      const d = ctx.getImageData(x, y, 1, 1).data;
+      return 0.299 * d[0] + 0.587 * d[1] + 0.114 * d[2];
+    } catch (e) { return 150; }
+  }
+  // 원본에 없던 작은 자연 요소(새/구름/나뭇잎/별)를 Canvas 도형으로 그림 — 외부 에셋 없음, 주변 밝기 매칭.
+  function drawDecal(ctx, kind, cx, cy, R, bright) {
+    const light = bright < 130;
+    const col = light ? 'rgba(255,255,255,0.92)' : 'rgba(70,70,82,0.9)';
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = col; ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(2, R * 0.16); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.shadowColor = light ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.35)';
+    ctx.shadowBlur = R * 0.4;
+    const s = R;
+    if (kind === 'bird') {
+      ctx.beginPath();
+      ctx.arc(-s * 0.42, 0, s * 0.5, -0.12 * Math.PI, -0.88 * Math.PI, true);
+      ctx.arc(s * 0.42, 0, s * 0.5, -0.12 * Math.PI, -0.88 * Math.PI, true);
+      ctx.stroke();
+    } else if (kind === 'cloud') {
+      ctx.beginPath();
+      ctx.arc(-s * 0.45, s * 0.12, s * 0.48, 0, Math.PI * 2);
+      ctx.arc(s * 0.02, -s * 0.18, s * 0.6, 0, Math.PI * 2);
+      ctx.arc(s * 0.55, s * 0.12, s * 0.44, 0, Math.PI * 2);
+      ctx.rect(-s * 0.5, s * 0.12, s * 1.1, s * 0.46);
+      ctx.fill();
+    } else if (kind === 'leaf') {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s * 0.4, s * 0.75, Math.PI / 5, 0, Math.PI * 2);
+      ctx.fill();
+    } else { // star
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+        const a2 = a + Math.PI / 5;
+        ctx.lineTo(Math.cos(a) * s * 0.8, Math.sin(a) * s * 0.8);
+        ctx.lineTo(Math.cos(a2) * s * 0.34, Math.sin(a2) * s * 0.34);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------- B 캔버스에 자연스러운 변형 적용 ----------
+  function applyDiffs(ctx, W, H, dpr) {
     const minWH = Math.min(W, H);
     for (const d of diffs) {
       const cx = d.cx * W, cy = d.cy * H, R = d.r * minWH;
-      if (d.kind === 'recolor') {
-        // 'color' 합성 → 디테일(명암) 유지하며 색만 바꿈(필터 미지원 브라우저에서도 동작)
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-        ctx.globalCompositeOperation = 'color';
-        ctx.fillStyle = `hsl(${d.hue}, 78%, 55%)`;
-        ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-        ctx.restore();
-      } else if (d.kind === 'erase') {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-        drawScene(ctx, W, H, d.sxOff * W, d.syOff * H); // 주변 픽셀 복제로 덮기
-        ctx.restore();
+      if (d.kind === 'hueshift') {
+        // 색조만 자연스럽게 변경(명암/디테일 유지) + 경계 페더링
+        featherComposite(ctx, W, H, cx, cy, R, dpr, (t) => {
+          if ('filter' in t) { t.filter = 'hue-rotate(' + d.hue + 'deg) saturate(1.2)'; drawScene(t, W, H); t.filter = 'none'; }
+          else { drawScene(t, W, H); t.globalCompositeOperation = 'color'; t.fillStyle = 'hsl(' + d.hue + ',75%,55%)'; t.fillRect(0, 0, W, H); }
+        });
       } else if (d.kind === 'flip') {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-        ctx.translate(cx * 2, 0); ctx.scale(-1, 1); // 영역 중심 기준 좌우 반전
-        drawScene(ctx, W, H);
-        ctx.restore();
-      } else if (d.kind === 'sticker') {
-        ctx.save();
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = (R * 1.7) + 'px ' + EMOJI_FONT;
-        ctx.fillText(d.emoji, cx, cy);
-        ctx.restore();
+        // 영역 중심 기준 좌우 반전 + 경계 페더링
+        featherComposite(ctx, W, H, cx, cy, R, dpr, (t) => {
+          t.save(); t.translate(cx * 2, 0); t.scale(-1, 1); drawScene(t, W, H); t.restore();
+        });
+      } else if (d.kind === 'decal') {
+        // 원본에 없던 작은 요소를 주변 밝기에 맞춰 은은하게 합성
+        drawDecal(ctx, d.decal, cx, cy, R, avgBrightness(ctx, cx, cy, dpr || 1));
       }
     }
   }
@@ -167,7 +225,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
     drawScene(ctx, cssW, cssH);
-    if (withDiffs) applyDiffs(ctx, cssW, cssH);
+    if (withDiffs) applyDiffs(ctx, cssW, cssH, dpr);
   }
 
   function render() {
@@ -332,7 +390,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     clearMarks();
 
     const spec = pickSpotImage();
-    imgTitle = spec.title;
+    imgTitle = _customSpotUrl ? '내 사진' : spec.title; // 📸 내가 찍은 사진이면 그걸로
     fbBg = spec.bg;
     diffs = buildDifferences(diff);
     buildFallbackObjects(spec, diffs); // 로드 실패 대비 폴백 장면(모든 변형이 보이도록 중심 오브젝트 포함)
@@ -351,7 +409,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     probe.onload = () => finish(probe.naturalWidth > 0 ? probe : null);
     probe.onerror = () => finish(null);
     window.setTimeout(() => finish(null), 6000);
-    probe.src = spec.src;
+    probe.src = _customSpotUrl || spec.src; // 커스텀 사진 우선
 
     startScreen.classList.remove('is-open');
     overScreen.classList.remove('is-open');
@@ -445,6 +503,25 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     btnHint.addEventListener('click', useHint);
     btnRetry.addEventListener('click', () => startGame(lastLevel));
     btnChangeDiff.addEventListener('click', goStart);
+
+    // 📸 내가 찍은 사진으로 — 사진 고른 뒤 난이도를 누르면 그 사진으로 플레이
+    const btnPhotoSpot = document.getElementById('btnPhotoSpot');
+    const photoSpotState = document.getElementById('photoSpotState');
+    if (btnPhotoSpot) btnPhotoSpot.addEventListener('click', () => {
+      sfx.pop();
+      openPhotoPicker({
+        maxSize: 1024,
+        onReady: (r) => {
+          if (_customSpotPhoto) { try { _customSpotPhoto.revoke() } catch (e) {} } // 이전 사진 해제(누수 방지)
+          _customSpotPhoto = r; _customSpotUrl = r.url;
+          if (photoSpotState) photoSpotState.textContent = '✓ 난이도 골라요!';
+          btnPhotoSpot.classList.add('is-used');
+        },
+        onError: () => {}, // 취소/실패 → 무시
+      });
+    });
+    // 언마운트(페이지 이탈) 시 카메라 사진 objectURL 해제(메모리 누수 방지)
+    window.addEventListener('pagehide', () => { if (_customSpotPhoto) { try { _customSpotPhoto.revoke() } catch (e) {} _customSpotPhoto = null; _customSpotUrl = null; } });
 
     stageA.addEventListener('pointerdown', onStageTap);
     stageB.addEventListener('pointerdown', onStageTap);

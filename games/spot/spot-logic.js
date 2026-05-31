@@ -2,12 +2,11 @@
    틀린그림찾기 · 순수 로직 (브라우저 + Node 공용)
    -------------------------------------------------------------------
    '한 장의 사진/그림' 방식: 같은 이미지를 두 번 그리고, 한쪽(B)에만 Canvas 로
-   국소 변형을 N군데 자동 생성한다. (저작권 없는 로컬 캐릭터 이미지 재사용)
-   변형 종류:
-     recolor — 한 부위의 색을 바꿈(hue-rotate)
-     erase   — 주변 픽셀을 복제해 덮어 물체를 지움
-     flip    — 한 부위를 좌우로 뒤집음
-     sticker — B 에만 작은 스티커(이모지)가 나타남
+   '자연스러운 변형(Natural Anomaly)' 을 N군데 자동 생성한다.
+   변형 종류(부자연스러운 공간 왜곡 제거 → 감쪽같은 3종으로 고도화):
+     hueshift — 한 부위 색조만 자연스럽게 변경(hue-rotate, 페더링 블렌딩)
+     flip     — 한 부위를 좌우로 반전(경계 페더링)
+     decal    — 원본에 없던 작은 자연 요소(새/구름/나뭇잎/별)를 주변 밝기에 맞춰 합성
    DOM/스토어 비의존 → Node 에서 import 해 단위 테스트 가능.
    =================================================================== */
 
@@ -26,9 +25,9 @@ export const DIFFS = {
   3: { level: 3, diffs: 5, time: 70, label: '어려움', emoji: '🔥' },
 };
 
-export const DIFF_KINDS = ['recolor', 'erase', 'flip', 'sticker'];
-// B 에만 등장하는 스티커 후보(아이 친화적)
-export const STICKER_EMOJIS = ['⭐', '❤️', '🌸', '🎈', '🍎', '🦋', '💎', '🌈', '🍀', '👑'];
+export const DIFF_KINDS = ['hueshift', 'flip', 'decal'];
+// decal: 원본에 없던 작은 자연 요소(주변 밝기에 맞춰 은은하게 합성). Canvas 도형으로 그림(외부 에셋 X).
+export const DECAL_KINDS = ['bird', 'cloud', 'leaf', 'star'];
 
 // 배치/판정 파라미터(정규화 좌표 0~1 기준)
 const MARGIN = 0.13;     // 가장자리 여백
@@ -56,15 +55,12 @@ export function buildDifferences(diff, rng = Math.random) {
     const r = MIN_R + rng() * (MAX_R - MIN_R);
     const kind = pick(DIFF_KINDS, rng);
     const spec = { id: specs.length, cx, cy, r, kind };
-    if (kind === 'recolor') {
-      spec.hue = 60 + Math.floor(rng() * 240); // 60~300도(원색과 충분히 다르게)
-    } else if (kind === 'erase') {
-      const ang = rng() * Math.PI * 2;          // 영역 밖 주변에서 깨끗한 픽셀을 가져올 방향
-      spec.sxOff = Math.cos(ang) * (r * 2.6);
-      spec.syOff = Math.sin(ang) * (r * 2.6);
-    } else if (kind === 'sticker') {
-      spec.emoji = pick(STICKER_EMOJIS, rng);
+    if (kind === 'hueshift') {
+      spec.hue = 50 + Math.floor(rng() * 260); // 50~310도(원색과 충분히 다르게)
+    } else if (kind === 'decal') {
+      spec.decal = pick(DECAL_KINDS, rng);      // 새/구름/나뭇잎/별
     }
+    // flip: 추가 파라미터 없음
     specs.push(spec);
   }
   return specs;

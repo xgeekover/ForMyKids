@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import {
   resetAll, createProfile, setActiveProfile, setCoop,
   awardPassportStamp, getPassport, getPassportCount, getPassportKinds,
+  getPassportLevel, getPassportTheme, prestigePassport, PASSPORT_SIZE,
+  resetProfile,
 } from './fmk-store.js'
 
 let passed = 0
@@ -75,4 +77,84 @@ const r3 = awardPassportStamp()
 assert.ok(kinds.some((k) => k.id === r3.kind.id), '무작위 종류는 카탈로그 내')
 ok('무작위 지급 종류 유효')
 
-console.log(`\n✅ fmk-passport(여권·격리) 테스트 ${passed}개 통과`)
+// ── 환생(Prestige): 16칸 채우면 정확히 한 번 full → 초기화 + 레벨업 ──
+{
+  resetAll()
+  const P = createProfile({ name: '여행가' })
+  setActiveProfile(P.id)
+  assert.equal(getPassportLevel(P.id), 0, '시작 레벨 0(초록)')
+  assert.equal(getPassportTheme(P.id).id, 'green')
+  let fullCount = 0
+  for (let i = 0; i < PASSPORT_SIZE; i++) {
+    const r = awardPassportStamp({ type: 'star' })
+    if (r.full) fullCount++
+    // 15개까지는 full=false, 16번째에만 full=true
+    if (i < PASSPORT_SIZE - 1) assert.equal(r.full, false, `${i + 1}칸: 아직 미완성`)
+    else { assert.equal(r.full, true, '16칸: 완성'); assert.deepEqual(r.fullProfileIds, [P.id]) }
+  }
+  assert.equal(fullCount, 1, '완성(full) 신호는 정확히 한 번')
+  assert.equal(getPassportCount(P.id), PASSPORT_SIZE, '초기화 전엔 16칸')
+  // 보상 확인 → 환생
+  const res = prestigePassport([P.id])
+  assert.equal(res.length, 1)
+  assert.equal(getPassportCount(P.id), 0, '환생 후 0칸으로 초기화')
+  assert.equal(getPassportLevel(P.id), 1, '레벨업(0→1)')
+  assert.equal(getPassportTheme(P.id).id, 'blue', '초록 → 파랑 여권')
+  // 다음 권도 16칸에서 다시 완성
+  let r2
+  for (let i = 0; i < PASSPORT_SIZE; i++) r2 = awardPassportStamp({ type: 'sun' })
+  assert.equal(r2.full, true, '새 여권도 16칸에서 완성')
+  prestigePassport([P.id])
+  assert.equal(getPassportLevel(P.id), 2, '레벨 2(빨강)')
+  assert.equal(getPassportTheme(P.id).id, 'red')
+}
+ok('환생(Prestige): 16칸 완성 1회 + 0칸 초기화 + 레벨/테마 상승')
+
+// ── 테마 단계: 초록→파랑→빨강→금색(최대) ──
+{
+  resetAll()
+  const Q = createProfile({ name: '단계' })
+  setActiveProfile(Q.id)
+  const ids = ['green', 'blue', 'red', 'gold', 'gold'] // 레벨 0~3 단계, 그 이상은 금색 유지
+  for (let lv = 0; lv < ids.length; lv++) {
+    assert.equal(getPassportTheme(Q.id).id, ids[lv], `레벨 ${lv} → ${ids[lv]}`)
+    prestigePassport([Q.id])
+  }
+}
+ok('환생 테마 단계(초록→파랑→빨강→금색, 이후 금색 유지)')
+
+// ── Co-op 환생: 두 아이 모두 완성 + 둘 다 환생 ──
+{
+  resetAll()
+  const X = createProfile({ name: '하나' })
+  const Y = createProfile({ name: '두리' })
+  setCoop([X.id, Y.id])
+  let last
+  for (let i = 0; i < PASSPORT_SIZE; i++) last = awardPassportStamp({ type: 'plane' })
+  assert.equal(last.full, true, 'Co-op 16칸 완성')
+  assert.deepEqual(last.fullProfileIds.slice().sort(), [X.id, Y.id].slice().sort(), '두 아이 모두 완성')
+  prestigePassport(last.fullProfileIds)
+  assert.equal(getPassportCount(X.id), 0); assert.equal(getPassportCount(Y.id), 0)
+  assert.equal(getPassportLevel(X.id), 1); assert.equal(getPassportLevel(Y.id), 1)
+}
+ok('Co-op 환생: 두 아이 모두 16칸 완성 + 둘 다 초기화/레벨업')
+
+// ── 회귀(리뷰): resetProfile 은 여권·환생 레벨도 함께 초기화('모든 기록' 약속 + 보상 오발 방지) ──
+{
+  resetAll()
+  const Z = createProfile({ name: '리셋' })
+  setActiveProfile(Z.id)
+  for (let i = 0; i < PASSPORT_SIZE; i++) awardPassportStamp({ type: 'star' })
+  prestigePassport([Z.id]) // 레벨 1, 여권 0칸
+  awardPassportStamp({ type: 'fish' }) // 1칸
+  assert.ok(getPassportCount(Z.id) > 0 && getPassportLevel(Z.id) === 1, '리셋 전: 스탬프/레벨 있음')
+  resetProfile(Z.id)
+  assert.equal(getPassportCount(Z.id), 0, 'resetProfile → 여권 0칸')
+  assert.equal(getPassportLevel(Z.id), 0, 'resetProfile → 환생 레벨 0')
+  // 리셋 후 다음 스탬프가 곧장 보상 오발하지 않음(1칸이라 full=false)
+  const r = awardPassportStamp({ type: 'sun' })
+  assert.equal(r.full, false, '리셋 후 1칸 → 보상 오발 없음')
+}
+ok('회귀: resetProfile 이 여권·환생 레벨까지 초기화(보상 오발 방지)')
+
+console.log(`\n✅ fmk-passport(여권·격리·환생) 테스트 ${passed}개 통과`)
