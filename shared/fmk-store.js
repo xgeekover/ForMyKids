@@ -46,6 +46,7 @@
    =================================================================== */
 
 import { celebrate } from './fmk-confetti.js'; // 칭찬 도장 해금 순간의 화면 전체 폭죽(브라우저 전용·Node 안전 no-op)
+import { enqueue, listQueue, clearQueue, drainQueue } from './fmk-syncqueue.js'; // 여행 모드 오프라인 큐(브라우저 전용·Node no-op)
 
 const KEY = 'fmk:v1';
 export const GAME_IDS = ['memory', 'popnpop', 'dodge', 'maze', 'spot', 'puzzle'];
@@ -240,6 +241,16 @@ function normProfile(p) {
     screen = { date: d, usedSec: (u !== undefined && u >= 0) ? Math.min(Math.floor(u), 24 * 3600) : 0 };
   }
 
+  // 일자별 플레이 횟수(잔디 활동 캘린더용). { 'YYYY-MM-DD': count } — 최근 ~370일만 보존(무한 성장 방지).
+  let days = {};
+  if (src.days && typeof src.days === 'object' && !Array.isArray(src.days)) {
+    const keys = Object.keys(src.days).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+    for (const k of keys.slice(-370)) {
+      const v = num(src.days[k]);
+      if (v !== undefined && v > 0) days[k] = Math.min(Math.floor(v), 100000);
+    }
+  }
+
   return {
     id: (typeof src.id === 'string' && src.id.trim()) ? src.id.trim().slice(0, 64) : genId(),
     name: (typeof src.name === 'string' && src.name.trim()) ? src.name.trim().slice(0, 24) : DEFAULT_NAME,
@@ -253,6 +264,7 @@ function normProfile(p) {
     customPuzzleId,
     dailyLimitMin,
     screen,
+    days,
   };
 }
 
@@ -386,6 +398,15 @@ export function recordPlay(gameId, result = {}) {
   g.plays += 1;
   g.lastPlayed = Date.now();
 
+  // 일자별 플레이 횟수 누적(잔디 활동 캘린더용). 오래된 날짜는 잘라 무한 성장 방지.
+  if (!prof.days || typeof prof.days !== 'object' || Array.isArray(prof.days)) prof.days = {};
+  const today = dayKey(Date.now());
+  prof.days[today] = (Number(prof.days[today]) || 0) + 1;
+  const dayKeys = Object.keys(prof.days);
+  if (dayKeys.length > 370) {
+    for (const k of dayKeys.sort().slice(0, dayKeys.length - 370)) delete prof.days[k];
+  }
+
   const fin = (v) => typeof v === 'number' && Number.isFinite(v);
   if (fin(result.score) && result.score >= 0) {
     g.bestScore = (g.bestScore == null) ? result.score : Math.max(g.bestScore, result.score);
@@ -461,6 +482,73 @@ export function markAchievementsViewed(profileId) {
  * 부모님 대시보드용 집계 데이터(프로필 단위). profileId 미지정 시 활성 프로필.
  * @returns {{ totalPlays, perGame, favoriteId, games, achievements:{unlocked,total}, profile:{id,name,avatar,themeColor} }}
  */
+// 로컬 날짜(YYYY-MM-DD). 활동 캘린더/스크린타임은 '아이의 하루' 기준이라 로컬 시간으로 끊는다.
+export function dayKey(ms) {
+  const d = (ms == null) ? new Date() : new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + da;
+}
+
+// 순수 함수: days({'YYYY-MM-DD':count}) → 잔디 캘린더 격자. 오늘(todayKey, 기본=오늘) 포함 weeks 주.
+// 반환: { weeks:[[{date,count,level}]], maxCount, totalDays, activeDays } (level 0~4: CSS 색 단계)
+export function buildActivityCalendar(days, todayKey, weeks) {
+  const map = (days && typeof days === 'object' && !Array.isArray(days)) ? days : {};
+  const W = (Number.isFinite(weeks) && weeks > 0) ? Math.floor(weeks) : 12;
+  const today = (typeof todayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(todayKey)) ? todayKey : dayKey();
+  // today 기준으로 이번 주 일요일까지 채워 7×W 격자를 만든다(맨 끝 칸 = 오늘)
+  const base = new Date(today + 'T00:00:00');
+  const dow = base.getDay();                 // 0(일)~6(토)
+  const totalCells = W * 7;
+  const start = new Date(base);
+  start.setDate(base.getDate() - (totalCells - 1 - (6 - dow))); // 격자 마지막 열이 '오늘이 속한 주'가 되도록
+  const cells = [];
+  let maxCount = 0, activeDays = 0;
+  for (let i = 0; i < totalCells; i++) {
+    const dt = new Date(start);
+    dt.setDate(start.getDate() + i);
+    const key = dayKey(dt.getTime());
+    const future = key > today; // 오늘 이후 칸은 비활성
+    const count = future ? 0 : Math.max(0, Number(map[key]) || 0); // 미래 칸은 통계(maxCount/activeDays)에서 제외
+    if (count > maxCount) maxCount = count;
+    if (count > 0) activeDays++;
+    cells.push({ date: key, count, future });
+  }
+  // level: 0(없음)~4. 1~3판 저강도, 많을수록 진하게(최댓값 기준 4분위).
+  for (const c of cells) {
+    if (c.future || c.count === 0) { c.level = 0; continue; }
+    if (maxCount <= 1) { c.level = 2; continue; }
+    const r = c.count / maxCount;
+    c.level = r > 0.75 ? 4 : r > 0.5 ? 3 : r > 0.25 ? 2 : 1;
+  }
+  const weeksArr = [];
+  for (let w = 0; w < W; w++) weeksArr.push(cells.slice(w * 7, w * 7 + 7));
+  return { weeks: weeksArr, maxCount, totalDays: totalCells, activeDays };
+}
+
+// 순수 함수: 오늘의 '스크린타임 대비 플레이 효율'. 플레이 1판당 분(낮을수록 알차게 많이 놂) +
+// 분당 플레이수 + 0~100 점수(친근한 게이지용). 화면시간 0 이면 효율 계산 보류(null).
+export function playEfficiency(todayPlays, usedSec) {
+  const plays = Math.max(0, Math.floor(Number(todayPlays) || 0));
+  const sec = Math.max(0, Math.floor(Number(usedSec) || 0));
+  const minutes = sec / 60;
+  if (sec === 0 || plays === 0) {
+    return { plays, minutes: Math.round(minutes * 10) / 10, perPlayMin: null, playsPerMin: 0, score: 0 };
+  }
+  const perPlayMin = minutes / plays;              // 한 판에 평균 몇 분
+  const playsPerMin = plays / minutes;             // 분당 몇 판
+  // 점수: 분당 0.5판(=2분/판)을 기준 100% 로, 0~100 클램프(아이 게임 1판 평균 1~3분 가정)
+  const score = Math.max(0, Math.min(100, Math.round(playsPerMin / 0.5 * 100)));
+  return {
+    plays,
+    minutes: Math.round(minutes * 10) / 10,
+    perPlayMin: Math.round(perPlayMin * 10) / 10,
+    playsPerMin: Math.round(playsPerMin * 100) / 100,
+    score,
+  };
+}
+
 export function getDashboard(profileId) {
   const p = _readProfile(getState(), profileId);
   const total = p.totalPlays || 0;
@@ -487,13 +575,28 @@ export function getDashboard(profileId) {
   }
   let favoriteId = null, max = 0;
   for (const pg of perGame) { if (pg.plays > max) { max = pg.plays; favoriteId = pg.id; } }
+
+  // 좋아하는 게임 랭킹(플레이 횟수 desc, 0판 제외). 동률은 GAME_IDS 순서 유지(안정 정렬).
+  const ranking = perGame.filter((pg) => pg.plays > 0).slice().sort((a, b) => b.plays - a.plays);
+  // 오늘 기록 + 스크린타임 효율
+  const today = dayKey();
+  const days = (p.days && typeof p.days === 'object' && !Array.isArray(p.days)) ? p.days : {};
+  const todayPlays = Math.max(0, Number(days[today]) || 0);
+  const todayUsedSec = (p.screen && p.screen.date === today) ? Math.max(0, Number(p.screen.usedSec) || 0) : 0;
+
   return {
     totalPlays: total,
     perGame,
     favoriteId,
+    ranking,
     games: p.games,
     achievements: { unlocked: _unlockedCount(p), total: ACHIEVEMENTS.length },
     profile: { id: p.id, name: p.name, avatar: p.avatar, themeColor: p.themeColor },
+    days,
+    today,
+    todayPlays,
+    todayUsedSec,
+    efficiency: playEfficiency(todayPlays, todayUsedSec),
   };
 }
 
@@ -742,8 +845,9 @@ export function importState(text) {
    - 모든 함수는 브라우저 전용 가드(typeof window/fetch) → Node 유닛테스트에서 안전 no-op.
    =================================================================== */
 const SYNC_URL = '/api/sync';   // Nginx 가 /api → backend 로 프록시(같은 오리진)
+const SYNC_TIMEOUT_MS = 8000;   // 여행지 약한 네트워크에서 fetch 가 무한 대기하지 않도록 타임아웃
 let _syncTimer = null;
-let _dirty = false;             // 푸시 대기 중인 로컬 변경 존재 여부(동기화 큐)
+let _dirty = false;             // 푸시 대기 중인 로컬 변경 존재 여부(인메모리 빠른 플래그)
 let _onlineHooked = false;
 let _syncStatus = 'offline';    // 'online' | 'offline' | 'syncing'
 let _statusCb = null;
@@ -783,35 +887,100 @@ function _deviceId() {
 function _ensureOnlineHook() {
   if (_onlineHooked || typeof window === 'undefined' || !window.addEventListener) return;
   _onlineHooked = true;
-  window.addEventListener('online', () => { _setStatus('syncing'); _flush(); });
+  // 온라인 복귀 → 영속 큐(여행 모드)부터 비우고, 인메모리 대기 변경도 올린다.
+  window.addEventListener('online', () => {
+    _setStatus('syncing');
+    if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; } // 디바운스 푸시와 드레인이 같은 payload 를 중복 전송하지 않도록
+    _drainQueue().then((res) => { if (!(res && (res.sent || res.reason === 'busy'))) _flush(); });
+  });
   window.addEventListener('offline', () => _setStatus('offline'));
 }
 
-// saveState 가 호출 → 디바운스 후 푸시. Node/오프라인이면 안전하게 빠진다(큐만 표시).
+// fetch 타임아웃(AbortController). 미지원 환경에선 일반 fetch 로 폴백.
+function _fetchWithTimeout(url, opts = {}) {
+  if (typeof AbortController === 'undefined') return fetch(url, opts);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, SYNC_TIMEOUT_MS);
+  return fetch(url, Object.assign({}, opts, { signal: ctrl.signal })).finally(() => clearTimeout(t));
+}
+
+// 주어진 payload 를 백엔드로 1회 POST(성공 true/실패 false). 타임아웃·네트워크 오류는 false.
+async function _postPayload(payload) {
+  if (typeof fetch === 'undefined') return false;
+  try {
+    const res = await _fetchWithTimeout(SYNC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: _deviceId(), updatedAt: (payload && payload.updatedAt) || 0, payload }),
+    });
+    return !!(res && res.ok);
+  } catch (e) { return false; } // 타임아웃(abort)·네트워크 오류 → 실패
+}
+
+// 단일 전송 게이트: 어떤 경로(_pushRemote / 드레인)든 동시에 두 번 POST 하지 않게 막는다(중복 전송 방지).
+// 반환: true=성공, false=실패, 'skip'=이미 전송 중(호출측은 아무 것도 하지 않음 — 진행 중 전송이 같은 데이터를 처리).
+let _posting = false;
+async function _send(payload) {
+  if (_posting) return 'skip';
+  _posting = true;
+  try { return await _postPayload(payload); }
+  finally { _posting = false; }
+}
+
+// 보낼 변경을 IndexedDB 에 영속 저장(여행 모드). 전체-payload LWW 라 '최신 하나'만 유지(무한 증가 방지).
+function _persistPending(s) {
+  try {
+    const rec = { id: _deviceId(), updatedAt: (s && s.updatedAt) || 0, payload: s, queuedAt: Date.now() };
+    Promise.resolve(clearQueue()).then(() => enqueue(rec)).catch(() => {}); // 비우고 1건만 추가
+  } catch (e) {}
+}
+
+// 영속 큐 드레인: 큐가 비어있지 않으면 '현재 최신 상태(getState)'를 한 번 전송(bulk)하고, 성공 시 큐를 비운다.
+// 동시 드레인은 큐 모듈의 _draining 가드가, 동시 POST 는 _send 게이트가 막는다.
+function _drainQueue() {
+  if (typeof window === 'undefined') return Promise.resolve({ sent: false, reason: 'node' });
+  if (!_isOnline()) { _setStatus('offline'); return Promise.resolve({ sent: false, reason: 'offline' }); }
+  return drainQueue({
+    list: listQueue,
+    send: async () => {
+      const r = await _send(getState()); // freshest. 'skip'=다른 전송 진행 중
+      if (r === true) { _dirty = false; _setStatus('online'); return true; }
+      if (r === 'skip') return false;     // 진행 중 → 이번 드레인은 큐 유지(다음 기회)
+      _setStatus('offline');
+      return false;
+    },
+    clearAll: clearQueue,
+  });
+}
+
+// saveState 가 호출 → 디바운스 후 푸시. 오프라인이면 IndexedDB 큐에 영속 저장(여행 모드).
 function scheduleSync() {
   if (typeof window === 'undefined') return;     // Node 안전(유닛테스트 무영향)
   _ensureOnlineHook();
   _dirty = true;
-  if (!_isOnline()) { _setStatus('offline'); return; } // 오프라인 → 큐에만 쌓고 온라인 복귀 시 전송
+  if (!_isOnline()) {
+    _setStatus('offline');
+    _persistPending(getState()); // 오프라인 → 큐에 영속 저장(새로고침/종료에도 살아남음 → 온라인 복귀 시 전송)
+    return;
+  }
   if (_syncTimer) clearTimeout(_syncTimer);
   _syncTimer = setTimeout(_pushRemote, 1500);    // 연속 변경을 한 번으로 합치는 디바운스
 }
 
-// 로컬 전체 payload(전 프로필) 를 백엔드로 업로드(POST). 실패해도 조용히 무시(오프라인 우선).
+// 로컬 전체 payload(전 프로필) 를 백엔드로 업로드(POST). 실패 시 IndexedDB 큐에 영속 저장. (동시 POST 는 _send 가 차단)
 async function _pushRemote() {
   if (typeof fetch === 'undefined' || !_isOnline()) { _setStatus('offline'); return; }
+  _syncTimer = null; // 디바운스 타이머 소진
   const s = getState();
-  try {
-    const res = await fetch(SYNC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: _deviceId(), updatedAt: s.updatedAt || 0, payload: s }),
-    });
-    if (!res || !res.ok) throw new Error('sync push failed');
+  const r = await _send(s); // true|false|'skip'
+  if (r === 'skip') return; // 다른 전송이 진행 중 → 그쪽이 같은 데이터를 처리(중복 방지)
+  if (r === true) {
     _dirty = false;
     _setStatus('online');
-  } catch (e) {
-    _setStatus('offline'); // 실패 → _dirty 유지, 다음 기회(online 이벤트/다음 저장)에 재시도
+    try { await clearQueue(); } catch (e) {} // 성공 → 영속 큐도 비움
+  } else {
+    _setStatus('offline');
+    _persistPending(s); // 실패(타임아웃 등) → 큐에 영속 저장(다음 기회 재시도)
   }
 }
 
@@ -861,7 +1030,11 @@ export function initSync(opts) {
   _pullRemote()
     .then((adopted) => {
       if (adopted && opts && typeof opts.onSync === 'function') { try { opts.onSync(); } catch (e) {} }
-      if (_dirty || !adopted) return _pushRemote(); // 로컬이 최신/대기변경 → 올림
+      // 새로고침 = 서버 접근 가능 시점 → 이전 세션에 쌓인 영속 큐(여행 모드)부터 비운다.
+      return _drainQueue().then((res) => {
+        // 큐로 안 보냈는데(빈 큐) 로컬이 최신(원격 미채택)이거나 대기 변경이 있으면 현재 상태를 올린다.
+        if (!(res && res.sent) && (_dirty || !adopted)) return _pushRemote();
+      });
     })
     .then(() => { _setStatus(_isOnline() ? 'online' : 'offline'); })
     .catch(() => _setStatus('offline'));

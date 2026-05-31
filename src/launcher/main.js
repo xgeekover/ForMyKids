@@ -13,6 +13,7 @@ import {
   getTotalAchievements,
   markAchievementsViewed,
   getDashboard,
+  buildActivityCalendar,
   resetProfile,
   exportState,
   importState,
@@ -287,6 +288,67 @@ function dashStampsHtml(profileId) {
   </div>`
 }
 
+// 🏅 좋아하는 놀이 랭킹 — 플레이 횟수 기준 막대(메달). 외부 라이브러리 없이 순수 DOM/CSS.
+function rankingHtml(d) {
+  if (!d.ranking || !d.ranking.length) return ''
+  const medals = ['🥇', '🥈', '🥉']
+  const top = d.ranking.slice(0, 5)
+  const maxPlays = top[0].plays || 1
+  const rows = top.map((p, i) => {
+    const w = Math.max(6, Math.round((p.plays / maxPlays) * 100))
+    return `<div class="rank-row">
+      <span class="rank-medal" aria-hidden="true">${medals[i] || (i + 1) + '위'}</span>
+      <span class="rank-name">${p.icon} ${escapeHtml(p.title)}</span>
+      <span class="dash-track"><span class="dash-fill" style="width:${w}%;background:linear-gradient(90deg,${gameColor(p.id)},${gameColor(p.id)})"></span></span>
+      <span class="dash-val">${p.plays}판</span>
+    </div>`
+  }).join('')
+  return `<div class="dash-section">
+    <h3 class="dash-title">🏅 좋아하는 놀이 랭킹</h3>
+    ${rows}
+  </div>`
+}
+
+// ⏱️ 오늘의 스크린타임 대비 플레이 효율 — 게이지(0~100) + 요약.
+function efficiencyHtml(d) {
+  if (!d.todayPlays) {
+    return `<div class="dash-section">
+      <h3 class="dash-title">⏱️ 오늘의 놀이 효율</h3>
+      <div class="dash-empty">오늘은 아직 놀이 기록이 없어요.</div>
+    </div>`
+  }
+  const e = d.efficiency
+  const tone = e.score >= 66 ? '#5cc98a' : e.score >= 33 ? '#ffc24d' : '#ff8fb1'
+  return `<div class="dash-section">
+    <h3 class="dash-title">⏱️ 오늘의 놀이 효율</h3>
+    <div class="eff-gauge"><span class="eff-gauge-fill" style="width:${e.score}%;background:${tone}"></span></div>
+    <div class="eff-stats">
+      <span>오늘 <b>${e.plays}판</b></span>
+      <span>화면시간 <b>${e.minutes}분</b></span>
+      <span>한 판당 <b>${e.perPlayMin != null ? e.perPlayMin + '분' : '-'}</b></span>
+    </div>
+  </div>`
+}
+
+// 🌱 놀이 잔디 — GitHub 스타일 활동 캘린더(최근 12주). 순수 CSS 격자.
+function activityCalendarHtml(d) {
+  const cal = buildActivityCalendar(d.days, d.today, 12)
+  const cols = cal.weeks.map((week) =>
+    `<div class="cal-col">${week.map((c) =>
+      `<span class="cal-cell lv${c.level}${c.future ? ' is-future' : ''}" title="${c.date} · ${c.count}판"></span>`
+    ).join('')}</div>`
+  ).join('')
+  const note = cal.activeDays > 0
+    ? `최근 12주 중 <b>${cal.activeDays}일</b> 놀았어요${cal.maxCount > 0 ? ` · 하루 최대 <b>${cal.maxCount}판</b>` : ''}`
+    : '아직 기록이 없어요. 매일 조금씩 놀면 잔디가 자라요! 🌱'
+  return `<div class="dash-section">
+    <h3 class="dash-title">🌱 놀이 잔디 (최근 12주)</h3>
+    <div class="cal-grid" role="img" aria-label="최근 12주 일별 놀이 활동 캘린더">${cols}</div>
+    <div class="cal-legend"><span>적게</span><span class="cal-cell lv1"></span><span class="cal-cell lv2"></span><span class="cal-cell lv3"></span><span class="cal-cell lv4"></span><span>많이</span></div>
+    <div class="dash-val" style="text-align:left;min-width:0">${note}</div>
+  </div>`
+}
+
 function renderDashboard(profileId) {
   const el = $('dashboard')
   if (!el) return
@@ -366,6 +428,9 @@ function renderDashboard(profileId) {
       <h3 class="dash-title">🎮 어떤 놀이를 좋아할까?</h3>
       ${secA}
     </div>
+    ${rankingHtml(d)}
+    ${efficiencyHtml(d)}
+    ${activityCalendarHtml(d)}
     <div class="dash-section">
       <h3 class="dash-title">🎈 풍선 학습(언어·산수)</h3>
       ${secB}

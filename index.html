@@ -385,6 +385,30 @@
     .dash-fill { height: 100%; border-radius: 999px; min-width: 3px; transition: width .6s cubic-bezier(.2,.9,.3,1.2); }
     .dash-val { flex: 0 0 auto; min-width: 62px; text-align: right; font-size: clamp(.82rem, 3.4vw, .98rem); color: var(--fmk-ink-soft); }
     .dash-empty { color: var(--fmk-ink-soft); font-size: .95rem; padding: 4px 0; }
+
+    /* 🏅 좋아하는 놀이 랭킹 */
+    .rank-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+    .rank-medal { flex: 0 0 auto; width: 28px; text-align: center; font-size: clamp(1.1rem, 5vw, 1.4rem); }
+    .rank-name { flex: 0 0 auto; width: clamp(72px, 26vw, 120px); font-size: clamp(.8rem, 3.4vw, .98rem); color: var(--fmk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ⏱️ 오늘의 놀이 효율 게이지 */
+    .eff-gauge { height: 16px; border-radius: 999px; background: rgba(180,150,255,.16); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(180,150,255,.18); margin-bottom: 8px; }
+    .eff-gauge-fill { display: block; height: 100%; border-radius: 999px; min-width: 4px; transition: width .6s cubic-bezier(.2,.9,.3,1.2); }
+    .eff-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: clamp(.82rem, 3.4vw, .98rem); color: var(--fmk-ink-soft); }
+    .eff-stats b { color: var(--fmk-ink); }
+
+    /* 🌱 놀이 잔디(활동 캘린더) — 7행 × 12열 격자 */
+    .cal-grid { display: flex; gap: 3px; padding: 2px 0; overflow-x: auto; }
+    .cal-col { display: flex; flex-direction: column; gap: 3px; }
+    .cal-cell { width: clamp(10px, 3.2vw, 16px); height: clamp(10px, 3.2vw, 16px); border-radius: 3px; background: rgba(150,120,210,.14); box-shadow: inset 0 0 0 1px rgba(150,120,210,.08); }
+    .cal-cell.lv1 { background: #cdeccd; }
+    .cal-cell.lv2 { background: #97d98a; }
+    .cal-cell.lv3 { background: #5cc36a; }
+    .cal-cell.lv4 { background: #2f9e4f; }
+    .cal-cell.is-future { background: transparent; box-shadow: none; }
+    .cal-legend { display: flex; align-items: center; gap: 4px; margin: 8px 0 4px; font-size: .8rem; color: var(--fmk-ink-soft); }
+    .cal-legend .cal-cell { width: 12px; height: 12px; }
+
     .dash-guide { background: linear-gradient(160deg, #fff7ea, #ffeccf); border-radius: var(--fmk-radius); padding: 12px 14px; font-size: clamp(.92rem, 3.8vw, 1.06rem); color: #7a5a2a; line-height: 1.5; box-shadow: inset 0 0 0 2px rgba(255,200,120,.35); }
     .dash-guide p { margin: 0 0 6px; }
     .dash-guide p:last-child { margin-bottom: 0; }
@@ -627,7 +651,7 @@
 
     @media (prefers-reduced-motion: reduce) {
       .bg-decor span, .hero-emoji, .card, .card-icon, .footer-hint, .ach-chip, .ach-modal, .ach-modal-card,
-      .ach-item .ach-stamp, .ach-confetti i, .ach-new-badge, .ach-chip.has-new, .dash-fill,
+      .ach-item .ach-stamp, .ach-confetti i, .ach-new-badge, .ach-chip.has-new, .dash-fill, .eff-gauge-fill,
       .stardust i, .report-badge.has-new, .rb-fill, .rb-stamps .dot.is-new, .launcher-toast,
       .settings-btn, .settings-knob, .settings-switch,
       .profile-btn, .avatar-opt, .color-opt, .sync-badge, .sync-badge .sync-dot,
