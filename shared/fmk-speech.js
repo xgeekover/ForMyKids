@@ -88,6 +88,28 @@ export function praise(name, opts = {}) {
   return spoke;
 }
 
+// 같이 하기(Co-op) 칭찬 — 두 아이 이름을 모두 부른다.
+let _idxMany = 0;
+const PRAISE_MANY = [
+  (ns) => `우와, ${ns} 둘 다 정말 최고야!`,
+  (ns) => `${ns}, 같이 해냈구나! 멋져!`,
+  (ns) => `${ns} 둘 다 정말 잘했어!`,
+  (ns) => `${ns}, 환상의 짝꿍이야!`,
+];
+
+/** 여러 아이 이름으로 함께 칭찬. 2명 미만이면 단일 praise 로 폴백. 미지원/음소거면 무시(false). */
+export function praiseMany(names, opts = {}) {
+  if (!isSupported()) return false;
+  const list = (Array.isArray(names) ? names : [])
+    .map((n) => (typeof n === 'string' ? n.trim().slice(0, 24) : ''))
+    .filter(Boolean);
+  if (list.length < 2) return praise(list[0] || '', opts); // 1명 이하 → 일반 칭찬
+  const msg = PRAISE_MANY[_idxMany % PRAISE_MANY.length](list.join(', '));
+  const spoke = speak(msg, opts);
+  if (spoke) _idxMany = (_idxMany + 1) % PRAISE_MANY.length;
+  return spoke;
+}
+
 /** 진행 중인 음성을 즉시 멈춘다(화면 전환/이탈 시). 미지원이면 no-op. */
 export function cancel() {
   try { if (isSupported()) window.speechSynthesis.cancel(); } catch (e) {}

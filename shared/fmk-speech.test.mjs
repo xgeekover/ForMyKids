@@ -10,10 +10,18 @@ let passed = 0
 const ok = (l) => { passed++; console.log('  ✓', l) }
 
 // ── fmk-speech: API export ──
-for (const fn of ['speak', 'praise', 'isSupported', 'cancel']) {
+for (const fn of ['speak', 'praise', 'praiseMany', 'isSupported', 'cancel']) {
   assert.equal(typeof speech[fn], 'function', `speech.${fn} export`)
 }
-ok('fmk-speech API export (speak·praise·isSupported·cancel)')
+ok('fmk-speech API export (speak·praise·praiseMany·isSupported·cancel)')
+
+// praiseMany(같이 하기 두 이름) Node 안전 no-op
+assert.doesNotThrow(() => {
+  assert.equal(speech.praiseMany(['아롱', '다롱']), false, '미지원이면 false')
+  assert.equal(speech.praiseMany([]), false, '빈 배열 안전')
+  assert.equal(speech.praiseMany(null), false, 'null 안전')
+}, 'praiseMany 미지원 환경 안전')
+ok('praiseMany: 두 이름 칭찬 Node 안전 no-op')
 
 // ── Node(미지원) 환경: isSupported=false, 호출은 throw 없이 false/no-op ──
 assert.equal(speech.isSupported(), false, 'Node 에는 SpeechSynthesis 가 없다')

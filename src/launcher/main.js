@@ -28,6 +28,8 @@ import {
   getProfiles,
   getActiveProfileId,
   setActiveProfile,
+  setCoop,
+  clearCoop,
   createProfile,
   // v1.3.0: 커스텀 퍼즐 + 스크린 타임
   setCustomPuzzleId,
@@ -663,6 +665,20 @@ function onProfileChosen() {
   _lastFocus = null
 }
 
+let _coopMode = false   // '같이 하기' 모드(2명 선택)
+let _coopSel = []       // 선택된 프로필 id(최대 2)
+
+// 같이 하기 안내문 + '둘이 시작!' 버튼 활성/비활성 갱신
+function _updateCoopBar() {
+  const bar = $('psCoopBar'); if (bar) bar.hidden = !_coopMode
+  const start = $('psCoopStart')
+  const hint = $('psCoopHint')
+  if (start) start.disabled = _coopSel.length !== 2
+  if (hint) hint.innerHTML = _coopSel.length === 0 ? '함께 놀 친구 <b>둘</b>을 골라요 👫'
+    : _coopSel.length === 1 ? '<b>한 명</b> 더 골라요!'
+    : '준비 완료! 둘이 시작해요 🎉'
+}
+
 function renderProfileSelector() {
   const list = $('psList')
   if (!list) return
@@ -670,7 +686,8 @@ function renderProfileSelector() {
   const cards = profiles
     .map((p) => {
       const hex = themeColorHex(p.themeColor) || '#ffd6ec'
-      return `<button class="ps-profile" type="button" data-profile="${p.id}" style="--ps-ring:${hex}" aria-label="${escapeHtml(p.name)} 으로 놀기">
+      const sel = _coopMode && _coopSel.includes(p.id)
+      return `<button class="ps-profile ${sel ? 'is-coop-selected' : ''}" type="button" data-profile="${p.id}" style="--ps-ring:${hex}" aria-label="${escapeHtml(p.name)}${_coopMode ? ' 같이 하기 선택' : ' 으로 놀기'}" aria-pressed="${_coopMode ? (sel ? 'true' : 'false') : 'false'}">
         <span class="ps-avatar" aria-hidden="true">${p.avatar}</span>
         <span class="ps-name">${escapeHtml(p.name)}</span>
         <span class="ps-meta">${p.totalPlays}판 · 도장 ${p.unlocked}개</span>
@@ -683,10 +700,35 @@ function renderProfileSelector() {
   </button>`
   list.innerHTML = cards + add
   Array.prototype.forEach.call(list.querySelectorAll('.ps-profile'), (b) => b.addEventListener('click', () => {
-    setActiveProfile(b.dataset.profile); sfx.pop(); onProfileChosen()
+    if (_coopMode) {
+      // 같이 하기: 토글 선택(최대 2명)
+      const id = b.dataset.profile
+      const i = _coopSel.indexOf(id)
+      if (i >= 0) _coopSel.splice(i, 1)
+      else if (_coopSel.length < 2) _coopSel.push(id)
+      sfx.pop()
+      renderProfileSelector() // 선택 표시 갱신
+      _updateCoopBar()
+    } else {
+      setActiveProfile(b.dataset.profile); sfx.pop(); onProfileChosen()
+    }
   }))
   const addBtn = $('psAddBtn')
   if (addBtn) addBtn.addEventListener('click', showCreateForm)
+  _updateCoopBar()
+}
+
+// 혼자 / 같이 하기 모드 전환(선택 화면 열릴 때 + 토글 버튼)
+function setSelectorMode(coop) {
+  _coopMode = !!coop
+  _coopSel = []
+  // 혼자 모드로 들어오면 저장소의 같이 하기 상태도 해제 → 선택 화면을 열 때마다 단일이 기본(끈적임 방지).
+  // (openProfileSelector 가 항상 setSelectorMode(false) 로 시작하므로, 직전 Co-op 이 다음 단일 플레이를 오염시키지 않음)
+  if (!_coopMode) { try { clearCoop() } catch (e) {} }
+  const solo = $('psModeSolo'); const co = $('psModeCoop')
+  if (solo) { solo.classList.toggle('is-active', !_coopMode); solo.setAttribute('aria-pressed', String(!_coopMode)) }
+  if (co) { co.classList.toggle('is-active', _coopMode); co.setAttribute('aria-pressed', String(_coopMode)) }
+  renderProfileSelector()
 }
 
 function markNewSelection() {
@@ -700,12 +742,17 @@ function showCreateForm() {
   const nameInput = $('psName'); if (nameInput) nameInput.value = ''
   markNewSelection()
   const l = $('psList'); if (l) l.hidden = true
+  // 만들기 폼이 열리는 동안엔 혼자/같이 하기 토글과 '둘이 시작!' 바를 숨김(폼 위에 겹쳐 오작동 방지)
+  const md = $('psMode'); if (md) md.hidden = true
+  const cb = $('psCoopBar'); if (cb) cb.hidden = true
   const c = $('psCreate'); if (c) c.hidden = false
   if (nameInput) nameInput.focus()
 }
 function hideCreateForm() {
   const c = $('psCreate'); if (c) c.hidden = true
   const l = $('psList'); if (l) l.hidden = false
+  const md = $('psMode'); if (md) md.hidden = false
+  _updateCoopBar() // 같이 하기 바 표시를 현재 모드에 맞춰 복원
 }
 // 새 친구 만들기 폼(아바타/색 그리드 + 확인/취소) — init 에서 1회만 빌드
 function buildSelectorCreateForm() {
@@ -729,6 +776,17 @@ function buildSelectorCreateForm() {
   })
   const cancel = $('psCreateCancel')
   if (cancel) cancel.addEventListener('click', hideCreateForm)
+
+  // 혼자 / 같이 하기 모드 토글 + '둘이 시작!' (1회 등록)
+  const solo = $('psModeSolo'); if (solo) solo.addEventListener('click', () => { setSelectorMode(false); sfx.pop() })
+  const co = $('psModeCoop'); if (co) co.addEventListener('click', () => { setSelectorMode(true); sfx.pop() })
+  const coopStart = $('psCoopStart')
+  if (coopStart) coopStart.addEventListener('click', () => {
+    if (_coopSel.length !== 2) return
+    if (!setCoop(_coopSel)) return // 서로 다른 2명만 — 실패 시 무시
+    sfx.pop()
+    onProfileChosen()
+  })
 }
 
 // '누가 놀까요?' 화면 열기. firstRun(또는 활성 프로필 없음)이면 닫기/배경클릭으로 못 빠져나감.
@@ -745,7 +803,7 @@ function _setGateLock(locked) {
 }
 function openProfileSelector(opts) {
   const firstRun = !!(opts && opts.firstRun)
-  renderProfileSelector()
+  setSelectorMode(false) // 열릴 때마다 '혼자' 모드로 초기화(이전 선택 잔여 제거 → 단일 모드 격리)
   hideCreateForm()
   const mustChoose = firstRun || !getActiveProfileId()
   const closeBtn = $('profileSelectClose')

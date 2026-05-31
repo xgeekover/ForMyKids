@@ -6,11 +6,20 @@
      제한에 도달하는 순간 친근한 잠금 오버레이를 띄운다(게임 위 전체 덮음).
    · 브라우저 가드(Node 안전 no-op).
    =================================================================== */
-import { addUsageToday, isOverLimit, getActiveProfileId } from './fmk-store.js';
+import { addUsageToday, isOverLimit, getActiveProfileId, getCoopProfileIds } from './fmk-store.js';
 
 const TICK_SEC = 20; // 누적 주기(초). 30분 제한 기준 충분히 정밀하면서 동기화 부담은 낮게.
 let _timer = 0;
 let _pageshowHooked = false;
+
+// 같이 하기면 참여한 두 아이 중 '한 명이라도' 제한 초과면 잠금(둘 다 보호). 단일이면 활성 기준.
+function _over() {
+  try {
+    const coop = getCoopProfileIds();
+    if (coop.length === 2) return coop.some((id) => isOverLimit(id));
+  } catch (e) {}
+  return isOverLimit(); // 단일 모드(활성 프로필 기준)
+}
 
 /** 친근한 잠금 오버레이 주입(이미 떠 있으면 무시). */
 export function lockOverlay(opts = {}) {
@@ -62,14 +71,14 @@ export function installGameGuard(opts = {}) {
   // bfcache/뒤로·앞으로 가기로 복원될 때도 잠금을 다시 평가(모듈 스크립트는 재실행되지 않으므로) — 1회만 등록
   if (!_pageshowHooked) {
     _pageshowHooked = true;
-    window.addEventListener('pageshow', () => { if (getActiveProfileId() && isOverLimit()) { _stop(); lockOverlay(opts); } });
+    window.addEventListener('pageshow', () => { if (getActiveProfileId() && _over()) { _stop(); lockOverlay(opts); } });
   }
-  if (isOverLimit()) { _stop(); lockOverlay(opts); return _stop; } // 이미 초과 → 바로 잠금
+  if (_over()) { _stop(); lockOverlay(opts); return _stop; } // 이미 초과 → 바로 잠금
   _stop();
   _timer = window.setInterval(() => {
     if (typeof document !== 'undefined' && document.hidden) return; // 안 보이는 동안은 누적 안 함
     addUsageToday(TICK_SEC);
-    if (isOverLimit()) { _stop(); lockOverlay(opts); }
+    if (_over()) { _stop(); lockOverlay(opts); }
   }, TICK_SEC * 1000);
   return _stop; // React useEffect cleanup 용 disposer(언마운트 시 타이머 정리)
 }

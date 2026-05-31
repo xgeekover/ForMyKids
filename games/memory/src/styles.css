@@ -239,6 +239,48 @@ body {
 .stat-icon { font-size: 1.1em; }
 .stat-value { font-weight: 700; min-width: 1.5em; text-align: center; }
 
+/* ---------- 같이 하기(Co-op) 차례/점수 칩 ---------- */
+.coop-turns {
+  display: flex;
+  gap: clamp(8px, 3vw, 16px);
+  flex: 1 1 auto;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.coop-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  padding: 5px clamp(8px, 2.4vw, 13px);
+  border-radius: 999px;
+  font-size: clamp(.9rem, 3.8vw, 1.15rem);
+  box-shadow: inset 0 0 0 2px rgba(150,150,170,.22);
+  opacity: .62;
+  transform: scale(.96);
+  transition: opacity .2s ease, transform .2s ease, box-shadow .2s ease;
+  white-space: nowrap;
+}
+.coop-player.is-turn {
+  /* 현재 차례 = 파란 테두리 + 또렷하게 강조 */
+  opacity: 1;
+  transform: scale(1.04);
+  box-shadow: inset 0 0 0 3px #3a8dff, 0 4px 12px rgba(58,141,255,.35);
+}
+.coop-avatar { font-size: 1.3em; line-height: 1; }
+.coop-name { font-weight: 700; max-width: 5.5em; overflow: hidden; text-overflow: ellipsis; }
+.coop-score { font-weight: 700; color: #c0407a; }
+@media (prefers-reduced-motion: reduce) {
+  .coop-player { transition: none; }
+}
+/* 같이 하기 결과(승리 팝업) */
+.coop-result { margin: 4px 0 10px; }
+.coop-result-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+.coop-result-player { font-size: clamp(.95rem, 4vw, 1.15rem); padding: 4px 12px; border-radius: 999px; background: #f3eefb; box-shadow: inset 0 0 0 2px rgba(150,120,210,.2); }
+.coop-result-player.is-winner { background: #fff3c4; box-shadow: inset 0 0 0 2px #ffcf3a; }
+.coop-result-player b { color: #c0407a; }
+.coop-result-msg { margin: 0; font-weight: 700; color: #6a4ea0; font-size: clamp(.95rem, 4vw, 1.12rem); }
+
 /* ---------- 5초 미리 보기 카운트다운 배너 ---------- */
 .preview-banner {
   position: fixed;

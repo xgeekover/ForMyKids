@@ -49,9 +49,15 @@ export const initialState = {
   timerRunning: false,
   win: null,         // null | { stars, moves, elapsed }
   round: 0,          // 매 판마다 증가 → 타이머/미리보기 effect 재시작용
+  // ── 같이 하기(Co-op) 턴제 ── (싱글은 coop:false 라 아래 분기들이 전부 no-op)
+  coop: false,       // 2명 참여 여부
+  players: [],       // [{id,name,avatar,themeColor}]×2
+  current: 0,        // 현재 차례(0=P1, 1=P2)
+  scores: [0, 0],    // 각자 맞춘 짝 수
 }
 
-function freshRound(state, level) {
+function freshRound(state, level, players) {
+  const ps = Array.isArray(players) ? players : (state.players || []) // RESTART 는 기존 players 유지
   return {
     ...initialState,
     screen: 'game',
@@ -61,13 +67,17 @@ function freshRound(state, level) {
     previewCount: LEVELS[level].preview ?? PREVIEW_SECONDS, // 난이도별 미리 보기 시간
     lockBoard: true,
     round: state.round + 1,
+    coop: ps.length === 2,
+    players: ps,
+    current: 0,
+    scores: [0, 0],
   }
 }
 
 export function reducer(state, action) {
   switch (action.type) {
     case 'START':
-      return freshRound(state, action.level)
+      return freshRound(state, action.level, action.players)
 
     case 'RESTART':
       return freshRound(state, state.level)
@@ -96,20 +106,25 @@ export function reducer(state, action) {
       return { ...state, cards: state.cards.map((c) => (set.has(c.uid) ? { ...c, wrong: true } : c)) }
     }
 
-    case 'RESOLVE_MATCH':
-      return {
-        ...state,
-        cards: state.cards.map((c) => (c.id === action.id ? { ...c, matched: true, flipped: false } : c)),
-        lockBoard: false,
+    case 'RESOLVE_MATCH': {
+      const cards = state.cards.map((c) => (c.id === action.id ? { ...c, matched: true, flipped: false } : c))
+      if (state.coop) {
+        // 맞추면 점수 +1, 같은 차례 계속(전통 메모리 룰)
+        const scores = state.scores.slice()
+        scores[state.current] = (scores[state.current] || 0) + 1
+        return { ...state, cards, lockBoard: false, scores }
       }
+      return { ...state, cards, lockBoard: false }
+    }
 
     case 'RESOLVE_MISMATCH': {
       const set = new Set(action.uids)
-      return {
-        ...state,
-        cards: state.cards.map((c) => (set.has(c.uid) ? { ...c, flipped: false, wrong: false } : c)),
-        lockBoard: false,
+      const cards = state.cards.map((c) => (set.has(c.uid) ? { ...c, flipped: false, wrong: false } : c))
+      if (state.coop) {
+        // 실패하면 상대에게 차례를 넘김
+        return { ...state, cards, lockBoard: false, current: state.current === 0 ? 1 : 0 }
       }
+      return { ...state, cards, lockBoard: false }
     }
 
     case 'TICK':
@@ -117,7 +132,15 @@ export function reducer(state, action) {
 
     case 'WIN': {
       const stars = calcStars(state.level, state.moves, state.elapsed)
-      return { ...state, win: { stars, moves: state.moves, elapsed: state.elapsed }, timerRunning: false }
+      const win = { stars, moves: state.moves, elapsed: state.elapsed }
+      if (state.coop) {
+        win.coop = true
+        win.scores = state.scores.slice()
+        win.players = state.players
+        // -1=무승부, 0=P1 승, 1=P2 승
+        win.winner = state.scores[0] === state.scores[1] ? -1 : (state.scores[0] > state.scores[1] ? 0 : 1)
+      }
+      return { ...state, win, timerRunning: false }
     }
 
     default:

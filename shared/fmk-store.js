@@ -133,7 +133,15 @@ function freshProfile(opts = {}) {
 }
 // 빈 v2 상태(프로필 없음 → 런처가 '누가 놀까요?' 선택 화면을 띄움)
 function freshState() {
-  return { version: 2, activeProfileId: null, profiles: [], updatedAt: 0 };
+  return { version: 2, activeProfileId: null, coopProfiles: [], profiles: [], updatedAt: 0 };
+}
+
+// coopProfiles 정규화: 실제 존재하는 서로 다른 2명일 때만 유효(아니면 []). 단일 모드와 격리.
+function _normCoop(raw, profiles) {
+  if (!Array.isArray(raw)) return [];
+  const valid = raw.filter((id, i, a) =>
+    typeof id === 'string' && a.indexOf(id) === i && profiles.some((p) => p.id === id)).slice(0, 2);
+  return valid.length === 2 ? valid : [];
 }
 
 // ---------- 저장소 접근(실패 시 in-memory 폴백) ----------
@@ -292,6 +300,7 @@ function normalizeState(obj) {
     return {
       version: 2,
       activeProfileId,
+      coopProfiles: _normCoop(obj.coopProfiles, profiles), // 같이 하기(2명) 상태 — 유효하지 않으면 []
       profiles,
       updatedAt: ua !== undefined ? Math.max(0, Math.floor(ua)) : 0,
     };
@@ -320,6 +329,7 @@ function normalizeState(obj) {
     return {
       version: 2,
       activeProfileId: prof.id,
+      coopProfiles: [], // v1 엔 같이 하기 개념 없음
       profiles: [prof],
       updatedAt: ua !== undefined ? Math.max(0, Math.floor(ua)) : 0,
     };
@@ -381,16 +391,9 @@ function _unlockedCount(p) {
  * @param {{score?:number, timeMs?:number, level?:number, stars?:number, stage?:number, mode?:string, noHintLevel?:number}} result
  * @returns {{ ok:boolean, stats?:object, newlyUnlocked:Array, state?:object }}
  */
-export function recordPlay(gameId, result = {}) {
-  if (!gameId || typeof gameId !== 'string') return { ok: false, newlyUnlocked: [] };
-  const s = getState();
-  // 활성 프로필이 없는데 프로필은 존재(아직 '누가 놀까요?'에서 선택 전)하면, 엉뚱한 프로필(첫 번째)에
-  // 잘못 적재하지 않도록 기록을 보류한다. 프로필이 하나도 없을 때만 _ensureActive 가 기본 프로필을
-  // 만들어 기록한다(직접 게임 진입/유닛테스트 대비 — 데이터 유실 방지).
-  if (_activeIndex(s) === -1 && Array.isArray(s.profiles) && s.profiles.length > 0) {
-    return { ok: false, newlyUnlocked: [] };
-  }
-  const prof = _ensureActive(s);
+// 한 프로필에 한 판 기록을 적용(최고기록·일자별·업적). 반환: 새로 해금된 업적 배열.
+// (단일/Co-op 공용 — saveState 는 호출측에서 1회만 한다)
+function _applyPlay(prof, gameId, result) {
   let g = prof.games[gameId];
   if (!g) g = prof.games[gameId] = freshGame(); // 새 게임도 첫 기록 시 자동 등록(확장성)
 
@@ -436,11 +439,47 @@ export function recordPlay(gameId, result = {}) {
       newlyUnlocked.push({ id: a.id, icon: a.icon, title: a.title, desc: a.desc });
     }
   }
+  return newlyUnlocked;
+}
 
+export function recordPlay(gameId, result = {}, opts = {}) {
+  if (!gameId || typeof gameId !== 'string') return { ok: false, newlyUnlocked: [] };
+  const s = getState();
+
+  // 참여 프로필 결정: 명시(opts.profileIds) > Co-op(정확히 2명) > 단일 활성.
+  // (단일 모드에선 coopProfiles 가 비어 ids=null → 아래 '기존과 100% 동일' 경로로 격리)
+  let ids = null;
+  if (opts && Array.isArray(opts.profileIds) && opts.profileIds.length) {
+    ids = opts.profileIds.filter((id) => s.profiles.some((p) => p.id === id));
+  } else {
+    const coop = Array.isArray(s.coopProfiles) ? s.coopProfiles.filter((id) => s.profiles.some((p) => p.id === id)) : [];
+    if (coop.length === 2) ids = coop;
+  }
+
+  if (ids && ids.length) {
+    // Co-op/멀티: 참여한 모든 프로필에 동일하게 누적. 새 업적은 첫 번째(P1) 기준으로 반환.
+    let primary = [];
+    ids.forEach((id, i) => {
+      const prof = s.profiles.find((p) => p.id === id);
+      if (!prof) return;
+      const u = _applyPlay(prof, gameId, result);
+      if (i === 0) primary = u;
+    });
+    saveState(s);
+    if (primary.length) { try { celebrate(); } catch (e) {} }
+    return { ok: true, newlyUnlocked: primary, coop: ids.length > 1, profileIds: ids.slice(), state: s };
+  }
+
+  // 단일(기존과 100% 동일): 활성 프로필이 없는데 프로필은 존재하면 보류(엉뚱한 프로필 적재 방지).
+  if (_activeIndex(s) === -1 && Array.isArray(s.profiles) && s.profiles.length > 0) {
+    return { ok: false, newlyUnlocked: [] };
+  }
+  const prof = _ensureActive(s);
+  const newlyUnlocked = _applyPlay(prof, gameId, result);
   saveState(s);
   // 새 칭찬 도장이 해금되는 순간 → 화면 전체 폭죽으로 시각적 보상(브라우저에서만, Node 안전 no-op)
   if (newlyUnlocked.length) { try { celebrate(); } catch (e) {} }
-  return { ok: true, stats: { ...g }, newlyUnlocked, state: s };
+  return { ok: true, stats: { ...prof.games[gameId] }, newlyUnlocked, state: s };
 }
 
 function safeTest(a, prof) { try { return !!a.test(prof); } catch (e) { return false; } }
@@ -633,8 +672,43 @@ export function setActiveProfile(id) {
   const p = s.profiles.find((x) => x && x.id === id);
   if (!p) return null;
   s.activeProfileId = p.id;
+  s.coopProfiles = []; // 단일 선택 → 같이 하기 해제(단일 모드 격리 보장)
   saveState(s);
   return { id: p.id, name: p.name, avatar: p.avatar, themeColor: p.themeColor };
+}
+
+/* ───────── 같이 하기(Co-op) — 두 프로필이 한 태블릿에서 함께 플레이 ─────────
+   coopProfiles 가 '정확히 서로 다른 2명'일 때만 Co-op. 그 외엔 항상 단일 모드처럼 동작한다. */
+
+/** Co-op 시작: 서로 다른 2명을 지정. P1 을 활성 프로필로도 설정(테마·단일 경로 호환). 성공 시 [{id,name,..}]×2, 실패 null. */
+export function setCoop(ids) {
+  const s = getState();
+  const valid = _normCoop(ids, s.profiles);
+  if (valid.length !== 2) return null; // 서로 다른 2명만 허용
+  s.coopProfiles = valid;
+  s.activeProfileId = valid[0];
+  saveState(s);
+  return getCoopProfiles();
+}
+/** 현재 Co-op 참여 프로필 id 배열(유효한 2명일 때만, 아니면 []). */
+export function getCoopProfileIds() {
+  const s = getState();
+  return _normCoop(s.coopProfiles, s.profiles);
+}
+/** 현재 Co-op 참여 프로필 요약 배열({id,name,avatar,themeColor}) — 0 또는 2개. */
+export function getCoopProfiles() {
+  const s = getState();
+  return getCoopProfileIds().map((id) => {
+    const p = s.profiles.find((x) => x.id === id);
+    return { id: p.id, name: p.name, avatar: p.avatar, themeColor: p.themeColor };
+  });
+}
+/** 지금 Co-op(2명) 모드인가? */
+export function isCoop() { return getCoopProfileIds().length === 2; }
+/** Co-op 해제(단일 모드로). */
+export function clearCoop() {
+  const s = getState();
+  if (Array.isArray(s.coopProfiles) && s.coopProfiles.length) { s.coopProfiles = []; saveState(s); }
 }
 /**
  * 새 프로필 생성. 기본적으로 생성 즉시 활성화(activate=true).
@@ -646,7 +720,9 @@ export function createProfile(opts = {}, ctrl = {}) {
   const name = (opts && typeof opts.name === 'string' && opts.name.trim()) ? opts.name.trim().slice(0, 24) : `친구 ${s.profiles.length + 1}`;
   const p = freshProfile({ name, avatar: opts.avatar, themeColor: opts.themeColor });
   s.profiles.push(p);
-  if (activate || !s.activeProfileId) s.activeProfileId = p.id;
+  // 새 프로필을 활성화하면 같이 하기도 해제(단일 모드 격리 — setActiveProfile 과 동일하게).
+  // 안 그러면 직전 Co-op 쌍이 남아 새 아이의 기록이 그 쌍에 잘못 적재된다.
+  if (activate || !s.activeProfileId) { s.activeProfileId = p.id; s.coopProfiles = []; }
   saveState(s);
   return { id: p.id, name: p.name, avatar: p.avatar, themeColor: p.themeColor };
 }
@@ -733,15 +809,28 @@ export function getUsageToday(profileId) {
   return _todayUsed(_readProfile(getState(), profileId));
 }
 /** 당일 사용량(초) 누적. 날짜가 바뀌었으면 먼저 리셋. (활성 프로필 기본) */
+function _addUsageTo(p, add, today) {
+  if (!p) return;
+  if (!p.screen || p.screen.date !== today) p.screen = { date: today, usedSec: 0 };
+  p.screen.usedSec = Math.floor((p.screen.usedSec || 0) + add);
+}
 export function addUsageToday(sec, profileId) {
   const add = num(sec);
   if (add === undefined || add <= 0) return;
   const s = getState();
-  const p = profileId ? s.profiles.find((x) => x && x.id === profileId) : _findProfile(s);
-  if (!p) return;
   const today = _todayStr();
-  if (!p.screen || p.screen.date !== today) p.screen = { date: today, usedSec: 0 };
-  p.screen.usedSec = Math.floor((p.screen.usedSec || 0) + add);
+  if (profileId) {
+    // 명시 지정 → 그 프로필만(기존과 동일)
+    _addUsageTo(s.profiles.find((x) => x && x.id === profileId), add, today);
+  } else {
+    const coop = _normCoop(s.coopProfiles, s.profiles);
+    if (coop.length === 2) {
+      // 같이 하기 → 함께 논 두 아이 모두에게 동일하게 누적
+      coop.forEach((id) => _addUsageTo(s.profiles.find((x) => x.id === id), add, today));
+    } else {
+      _addUsageTo(_findProfile(s), add, today); // 단일(기존과 동일)
+    }
+  }
   saveState(s);
 }
 /** 오늘 제한을 초과했는가(제한 없음이면 항상 false). */

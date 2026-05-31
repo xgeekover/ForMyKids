@@ -21,17 +21,23 @@
 export * from './fmk-sound.js';
 
 // ── 칭찬 음성(TTS) ──
-export { speak, praise, cancel as cancelVoice, isSupported as isVoiceSupported } from './fmk-speech.js';
+export { speak, praise, praiseMany, cancel as cancelVoice, isSupported as isVoiceSupported } from './fmk-speech.js';
 
-import { praise as _praise } from './fmk-speech.js';
-import { getActiveProfile } from './fmk-store.js';
+import { praise as _praise, praiseMany as _praiseMany } from './fmk-speech.js';
+import { getActiveProfile, getCoopProfiles } from './fmk-store.js';
 
 /**
- * 활성 프로필(현재 노는 아이)의 이름을 불러 칭찬한다. 게임 클리어/도장 해금 한 줄 연동용.
- * 음소거·TTS 미지원·Node 환경이면 조용히 무시(false 반환). 이름을 못 읽어도 일반 칭찬으로 진행.
+ * 지금 노는 아이(들)를 이름으로 부르며 칭찬한다. 게임 클리어/도장 해금 한 줄 연동용.
+ * 같이 하기(Co-op)면 두 아이 이름을 모두 부르고, 단일이면 활성 프로필 이름을 부른다.
+ * 음소거·TTS 미지원·Node 환경이면 조용히 무시(false 반환).
  * @returns {boolean} 실제로 발화를 시작했으면 true
  */
 export function cheerActive(opts = {}) {
+  // 같이 하기면 두 아이 모두 호명
+  try {
+    const coop = (typeof getCoopProfiles === 'function' && getCoopProfiles()) || [];
+    if (coop.length === 2) return _praiseMany(coop.map((p) => p.name), opts);
+  } catch (e) {}
   let name = '';
   try {
     const p = getActiveProfile && getActiveProfile();

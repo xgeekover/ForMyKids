@@ -99,7 +99,7 @@ export function useMemoryGame() {
   /* 언마운트 정리 */
   useEffect(() => () => clearTimeouts(), [clearTimeouts])
 
-  const startGame = useCallback((level) => { clearTimeouts(); setAnnounce(''); sound.resume(); dispatch({ type: 'START', level }) }, [clearTimeouts])
+  const startGame = useCallback((level, players) => { clearTimeouts(); setAnnounce(''); sound.resume(); dispatch({ type: 'START', level, players }) }, [clearTimeouts])
   const restart   = useCallback(() => { clearTimeouts(); setAnnounce(''); dispatch({ type: 'RESTART' }) }, [clearTimeouts])
   const goMenu    = useCallback(() => { clearTimeouts(); setAnnounce(''); dispatch({ type: 'MENU' }) }, [clearTimeouts])
 

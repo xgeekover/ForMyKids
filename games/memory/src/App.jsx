@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useMemoryGame } from './hooks/useMemoryGame.js'
 import { sound } from './sound.js'
 import { LEVEL_ORDER } from './data/levels.js'
-import { recordPlay } from '../../../shared/fmk-store.js'   // 플랫폼 공통 기록 저장소
+import { recordPlay, getCoopProfiles } from '../../../shared/fmk-store.js'   // 플랫폼 공통 기록 저장소(+같이 하기)
 import { celebrate } from '../../../shared/fmk-confetti.js' // 클리어 시 화면 전체 폭죽
 import { cheerActive } from '../../../shared/fmk-audio.js'  // 클리어 시 아이 이름 부르며 칭찬(TTS)
 import { installGameGuard } from '../../../shared/fmk-screentime.js' // 스크린 타임 가드
@@ -54,7 +54,8 @@ export default function App() {
       <BgDecor />
       <main className="app">
         {state.screen === 'start' ? (
-          <StartScreen onSelect={startGame} />
+          // 시작 시 같이 하기(Co-op) 참여자를 읽어 전달 — 단일이면 [] 라 기존과 동일
+          <StartScreen onSelect={(level) => startGame(level, getCoopProfiles())} />
         ) : (
           <section className="screen screen--game is-active">
             <Hud
@@ -64,6 +65,10 @@ export default function App() {
               total={total}
               onHome={goMenu}
               onRestart={restart}
+              coop={state.coop}
+              players={state.players}
+              current={state.current}
+              scores={state.scores}
             />
             <PreviewBanner show={state.inPreview} count={state.previewCount} />
             <Board cards={state.cards} level={state.level} inPreview={state.inPreview} onFlip={flipCard} />
