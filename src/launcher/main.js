@@ -30,6 +30,8 @@ import {
   setActiveProfile,
   setCoop,
   clearCoop,
+  getPassport,
+  getPassportCount,
   createProfile,
   // v1.3.0: 커스텀 퍼즐 + 스크린 타임
   setCustomPuzzleId,
@@ -44,7 +46,6 @@ import { compressImage, savePhoto, deletePhoto, loadPhoto } from '../../shared/f
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import * as sfx from '../../shared/fmk-sound.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
-import { cheerActive } from '../../shared/fmk-audio.js' // 새 도장 확인 시 아이 이름 부르며 칭찬(TTS)
 
 installCrashGuard({ homeHref: 'index.html', isLauncher: true }) // 런처는 새로고침으로 복구
 registerServiceWorker('sw.js')                                  // 오프라인 캐싱(운영 빌드)
@@ -526,7 +527,7 @@ function hideModal(modalId) {
 }
 function closeAllModals() {
   let any = false
-  ;['achModal', 'parentsModal', 'settingsModal', 'profileModal', 'screenLockModal'].forEach((id) => { const m = $(id); if (m && !m.hidden) { m.hidden = true; any = true } })
+  ;['achModal', 'passportModal', 'parentsModal', 'settingsModal', 'profileModal', 'screenLockModal'].forEach((id) => { const m = $(id); if (m && !m.hidden) { m.hidden = true; any = true } })
   if (any && _lastFocus && typeof _lastFocus.focus === 'function') _lastFocus.focus()
   _lastFocus = null
 }
@@ -540,10 +541,55 @@ function openAchModal() {
   // 모션 줄이기 설정이면 폭죽 DOM 자체를 만들지 않음(애니메이션도 어차피 꺼짐)
   if (newItems.length && !prefersReducedMotion()) spawnConfetti($('achConfetti'))
   if (newItems.length) celebrate() // 새 칭찬 도장이 있으면 화면 전체 폭죽(reduced-motion 은 함수 내부에서 처리)
-  if (newItems.length) { sfx.resume(); sfx.fanfare(); cheerActive() } // 도장 받음 → 팡파레 + 이름 부르며 칭찬
+  if (newItems.length) { sfx.resume(); sfx.fanfare() } // 새 도장 → 팡파레(효과음)
 
   markAchievementsViewed() // 본 것으로 표시 → 다음부터는 연출 안 함
   renderReport() // 성적표 배지의 새 도장 표시 갱신
+}
+
+// ───────────────────────── 📔 내 여권(여행 스탬프북) ─────────────────────────
+const PASSPORT_PER_PAGE = 16 // 한 페이지 4×4 칸
+let _passportPage = 0
+
+function renderPassport() {
+  const grid = $('passportGrid')
+  if (!grid) return
+  const stamps = getPassport() // 활성 프로필의 여권 스탬프(획득 순)
+  const total = stamps.length
+  const pages = Math.max(1, Math.ceil(total / PASSPORT_PER_PAGE))
+  if (_passportPage > pages - 1) _passportPage = pages - 1
+  if (_passportPage < 0) _passportPage = 0
+  const start = _passportPage * PASSPORT_PER_PAGE
+  // 마지막 페이지에서 막 받은 스탬프(가장 최근 1개)는 'is-new' 로 톡 튀게
+  const newestIdx = total - 1
+  let cells = ''
+  for (let i = 0; i < PASSPORT_PER_PAGE; i++) {
+    const idx = start + i
+    const st = stamps[idx]
+    if (st) {
+      const isNew = idx === newestIdx
+      const tilt = ((idx * 37) % 11) - 5 // -5~5도 살짝 기울여 도장 느낌
+      cells += `<div class="passport-slot is-filled${isNew ? ' is-new' : ''}" style="--tilt:${tilt}deg" title="${escapeHtml(st.name)}">${st.emoji}</div>`
+    } else {
+      cells += '<div class="passport-slot is-empty" aria-hidden="true"></div>'
+    }
+  }
+  grid.innerHTML = cells
+  const sub = $('passportSub')
+  if (sub) sub.innerHTML = total > 0 ? `모은 스탬프 <b>${total}</b>개` : '아직 스탬프가 없어요. 게임을 클리어하면 받아요! ✈️'
+  const nav = $('passportNav')
+  if (nav) nav.hidden = pages <= 1
+  const pageEl = $('passportPage')
+  if (pageEl) pageEl.textContent = `${_passportPage + 1} / ${pages}`
+  const prev = $('passportPrev'); if (prev) prev.disabled = _passportPage <= 0
+  const next = $('passportNext'); if (next) next.disabled = _passportPage >= pages - 1
+}
+
+function openPassport() {
+  const total = getPassportCount()
+  _passportPage = Math.max(0, Math.ceil(total / PASSPORT_PER_PAGE) - 1) // 가장 최근 스탬프가 있는 페이지부터
+  renderPassport()
+  showModal('passportModal', 'passportClose')
 }
 
 function openParents() {
@@ -900,6 +946,15 @@ function init() {
   if (reportBadge) reportBadge.addEventListener('click', openAchModal)
   const parentsChip = $('parentsChip')
   if (parentsChip) parentsChip.addEventListener('click', openParents)
+  // 📔 내 여권
+  const passportChip = $('passportChip')
+  if (passportChip) passportChip.addEventListener('click', () => { sfx.pop(); openPassport() })
+  const passportClose = $('passportClose')
+  if (passportClose) passportClose.addEventListener('click', () => hideModal('passportModal'))
+  const passportPrev = $('passportPrev')
+  if (passportPrev) passportPrev.addEventListener('click', () => { _passportPage -= 1; renderPassport(); sfx.pop() })
+  const passportNext = $('passportNext')
+  if (passportNext) passportNext.addEventListener('click', () => { _passportPage += 1; renderPassport(); sfx.pop() })
 
   setupInstallPrompt() // 📱 앱 설치하기 버튼(beforeinstallprompt 잡힐 때만 노출)
 
@@ -997,7 +1052,7 @@ function init() {
   const parentsClose = $('parentsClose')
   if (parentsClose) parentsClose.addEventListener('click', () => hideModal('parentsModal'))
 
-  ;['achModal', 'parentsModal', 'settingsModal', 'profileModal', 'screenLockModal'].forEach((id) => {
+  ;['achModal', 'passportModal', 'parentsModal', 'settingsModal', 'profileModal', 'screenLockModal'].forEach((id) => {
     const m = $(id)
     if (!m) return
     m.addEventListener('click', (e) => { if (e.target === m) hideModal(id) }) // 배경(딤) 클릭 닫기

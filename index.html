@@ -286,6 +286,30 @@
     /* ===== 칭찬 도장(stamp) 그리드 + '쾅!' 연출 + 폭죽 ===== */
     .launcher-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; position: relative; z-index: 1; }
     .ach-chip--parents { background: linear-gradient(160deg, #e9e0ff, #c9b6ff); color: #4a3a86; }
+    .ach-chip--passport { background: linear-gradient(160deg, #ffe7c2, #ffcf8f); color: #8a5a1f; }
+
+    /* 📔 내 여권(스탬프북) — 실제 여권처럼 아기자기하게 */
+    .passport-card { background: linear-gradient(165deg, #fff8ee, #ffeccf); box-shadow: 0 18px 50px rgba(0,0,0,.3), inset 0 0 0 5px rgba(196,140,60,.5), inset 0 0 0 9px rgba(255,255,255,.7); }
+    .passport-sub { text-align: center; margin: 0 0 14px; color: #8a5a1f; font-size: clamp(.95rem, 4vw, 1.12rem); }
+    .passport-sub b { font-size: 1.15em; }
+    .passport-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(8px, 2.6vw, 14px); }
+    .passport-slot {
+      aspect-ratio: 1 / 1; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+      font-size: clamp(1.6rem, 8vw, 2.6rem);
+      background: rgba(196,140,60,.07); box-shadow: inset 0 0 0 2px rgba(196,140,60,.22);
+    }
+    .passport-slot.is-empty { border: 2.5px dashed rgba(196,140,60,.4); background: transparent; box-shadow: none; }
+    .passport-slot.is-filled {
+      background: radial-gradient(circle at 50% 40%, #fff, #ffe7c2);
+      box-shadow: inset 0 0 0 2.5px rgba(196,140,60,.55), 0 4px 10px rgba(160,110,40,.18);
+      transform: rotate(var(--tilt, -4deg));
+    }
+    .passport-slot.is-new { animation: pp-pop .5s cubic-bezier(.2,.9,.3,1.5); }
+    @keyframes pp-pop { 0% { transform: scale(.2) rotate(-12deg); opacity: 0; } 60% { transform: scale(1.12) rotate(4deg); } 100% { transform: scale(1) rotate(var(--tilt,-4deg)); opacity: 1; } }
+    .passport-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+    .passport-arrow { min-width: 48px; min-height: 44px; padding: 6px 14px; }
+    .passport-page { font-weight: 700; color: #8a5a1f; min-width: 56px; text-align: center; }
+    @media (prefers-reduced-motion: reduce) { .passport-slot.is-new { animation: none; } }
     /* 📱 앱 설치하기 칩 — 눈에 띄게 은은한 펄스 */
     .ach-chip--install { background: linear-gradient(160deg, #c8f7d4, #7fe0a0); color: #1f7a4d; animation: installPulse 1.8s ease-in-out infinite; }
     .ach-chip--install[hidden] { display: none; }
@@ -722,6 +746,9 @@
 
   <!-- 부모님 방 (소리/전체화면은 우측 상단 ⚙️ 설정으로 이동) -->
   <div class="launcher-actions">
+    <button class="ach-chip ach-chip--passport" id="passportChip" type="button" aria-label="내 여권 — 모은 스탬프 보기">
+      <span aria-hidden="true">📔</span> 내 여권
+    </button>
     <button class="ach-chip ach-chip--parents" id="parentsChip" type="button" aria-label="부모님 방 — 성장 대시보드">
       <span aria-hidden="true">👪</span> 부모님 방
     </button>
@@ -743,6 +770,21 @@
       <button class="ach-close" id="achClose" type="button" aria-label="닫기">✕</button>
       <h2 class="ach-modal-title">🏆 칭찬 도장</h2>
       <div class="ach-list" id="achList"></div>
+    </div>
+  </div>
+
+  <!-- 📔 내 여권(여행 스탬프북) -->
+  <div class="ach-modal" id="passportModal" hidden>
+    <div class="ach-modal-card passport-card" role="dialog" aria-modal="true" aria-label="내 여권">
+      <button class="ach-close" id="passportClose" type="button" aria-label="닫기">✕</button>
+      <h2 class="ach-modal-title">📔 내 여권</h2>
+      <p class="passport-sub" id="passportSub">모은 스탬프 <b>0</b>개</p>
+      <div class="passport-grid" id="passportGrid" aria-label="모은 여권 스탬프"></div>
+      <div class="passport-nav" id="passportNav" hidden>
+        <button class="fmk-btn passport-arrow" id="passportPrev" type="button" aria-label="이전 페이지">◀</button>
+        <span class="passport-page" id="passportPage">1 / 1</span>
+        <button class="fmk-btn passport-arrow" id="passportNext" type="button" aria-label="다음 페이지">▶</button>
+      </div>
     </div>
   </div>
 

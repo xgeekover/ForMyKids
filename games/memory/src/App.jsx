@@ -2,9 +2,9 @@ import { useEffect } from 'react'
 import { useMemoryGame } from './hooks/useMemoryGame.js'
 import { sound } from './sound.js'
 import { LEVEL_ORDER } from './data/levels.js'
-import { recordPlay, getCoopProfiles } from '../../../shared/fmk-store.js'   // 플랫폼 공통 기록 저장소(+같이 하기)
+import { recordPlay, getCoopProfiles, awardPassportStamp } from '../../../shared/fmk-store.js' // 기록 저장소(+같이 하기·여권)
 import { celebrate } from '../../../shared/fmk-confetti.js' // 클리어 시 화면 전체 폭죽
-import { cheerActive } from '../../../shared/fmk-audio.js'  // 클리어 시 아이 이름 부르며 칭찬(TTS)
+import { dropStamp } from '../../../shared/fmk-stamp.js'    // 여권 스탬프 '쾅!' 획득 연출
 import { installGameGuard } from '../../../shared/fmk-screentime.js' // 스크린 타임 가드
 import BgDecor from './components/BgDecor.jsx'
 import StartScreen from './components/StartScreen.jsx'
@@ -41,7 +41,8 @@ export default function App() {
       level: LEVEL_ORDER.indexOf(state.level) + 1,
     })
     celebrate() // 짝꿍 다 맞춤(클리어)! 화면 전체 폭죽
-    cheerActive() // "우와, OO 최고!" 음성 칭찬(음소거/미지원 시 무시)
+    const award = awardPassportStamp() // 여권 스탬프 지급(같이 하기면 두 아이 모두)
+    if (award) dropStamp(award) // 큰 스탬프 '쾅!' 연출 + 팡파레
   }, [state.win]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

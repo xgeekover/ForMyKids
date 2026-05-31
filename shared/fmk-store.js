@@ -259,6 +259,16 @@ function normProfile(p) {
     }
   }
 
+  // 여권 스탬프(여행 보상) — 게임 클리어마다 받는 수집형 스탬프. [{t:<kindId>, at:<ms>}] (최근 ~400개 보존).
+  // (칭찬 도장 achievements 와는 별개 — 이건 무작위 드롭 수집물)
+  let passport = [];
+  if (Array.isArray(src.passport)) {
+    passport = src.passport
+      .filter((x) => x && typeof x === 'object' && typeof x.t === 'string')
+      .map((x) => ({ t: x.t.slice(0, 32), at: Math.max(0, Math.floor(num(x.at) || 0)) }))
+      .slice(-400);
+  }
+
   return {
     id: (typeof src.id === 'string' && src.id.trim()) ? src.id.trim().slice(0, 64) : genId(),
     name: (typeof src.name === 'string' && src.name.trim()) ? src.name.trim().slice(0, 24) : DEFAULT_NAME,
@@ -273,6 +283,7 @@ function normProfile(p) {
     dailyLimitMin,
     screen,
     days,
+    passport,
   };
 }
 
@@ -709,6 +720,89 @@ export function isCoop() { return getCoopProfileIds().length === 2; }
 export function clearCoop() {
   const s = getState();
   if (Array.isArray(s.coopProfiles) && s.coopProfiles.length) { s.coopProfiles = []; saveState(s); }
+}
+
+/* ───────── 여권 스탬프(여행 보상) — 게임 클리어마다 받는 수집형 스탬프 ─────────
+   칭찬 도장(achievements: 조건 달성)과는 별개. 무작위 종류가 '쾅!' 찍힌다.
+   저장은 saveState → scheduleSync 를 거쳐 오프라인이면 IndexedDB 큐(fmk-syncqueue)에 영속된다. */
+export const PASSPORT_KINDS = [
+  { id: 'plane', emoji: '✈️', name: '비행기' },
+  { id: 'fish', emoji: '🐟', name: '물고기' },
+  { id: 'palm', emoji: '🌴', name: '야자수' },
+  { id: 'map', emoji: '🗺️', name: '지도' },
+  { id: 'compass', emoji: '🧭', name: '나침반' },
+  { id: 'sail', emoji: '⛵', name: '돛단배' },
+  { id: 'island', emoji: '🏝️', name: '섬' },
+  { id: 'shell', emoji: '🐚', name: '소라' },
+  { id: 'sun', emoji: '☀️', name: '햇님' },
+  { id: 'rainbow', emoji: '🌈', name: '무지개' },
+  { id: 'bag', emoji: '🎒', name: '가방' },
+  { id: 'cake', emoji: '🧁', name: '컵케이크' },
+  { id: 'star', emoji: '⭐', name: '별' },
+  { id: 'turtle', emoji: '🐢', name: '거북이' },
+  { id: 'balloon', emoji: '🎈', name: '풍선' },
+  { id: 'crown', emoji: '👑', name: '왕관' },
+];
+const _KIND_BY_ID = Object.fromEntries(PASSPORT_KINDS.map((k) => [k.id, k]));
+
+/** 여권 스탬프 카탈로그(복사본). */
+export function getPassportKinds() { return PASSPORT_KINDS.map((k) => ({ ...k })); }
+
+/**
+ * 게임 클리어 보상으로 무작위 여권 스탬프를 지급한다.
+ * 참여 프로필: opts.profileIds > Co-op(2명) > 단일 활성. (recordPlay 와 동일한 격리 규칙)
+ * opts.type 으로 특정 종류 지정 가능(테스트/연출용). 같은 스탬프를 참여자 모두에게 1개씩만 준다(이중 지급 방지).
+ * @returns {{kind:{id,emoji,name}, at:number, profileIds:string[], coop:boolean} | null}
+ */
+export function awardPassportStamp(opts = {}) {
+  const s = getState();
+  // 참여 프로필 결정(단일 모드에선 coopProfiles 가 비어 단일 활성 경로 → 누수 없음)
+  let profs;
+  if (opts && Array.isArray(opts.profileIds) && opts.profileIds.length) {
+    // 중복 id 는 제거(같은 프로필에 이중 지급 방지) — 존재하는 프로필만
+    profs = opts.profileIds
+      .filter((id, i, a) => a.indexOf(id) === i)
+      .map((id) => s.profiles.find((p) => p.id === id))
+      .filter(Boolean);
+  } else {
+    const coop = Array.isArray(s.coopProfiles) ? s.coopProfiles.filter((id) => s.profiles.some((p) => p.id === id)) : [];
+    if (coop.length === 2) {
+      profs = coop.map((id) => s.profiles.find((p) => p.id === id));
+    } else {
+      // 단일: 활성 프로필이 없는데 프로필은 존재 → 보류(엉뚱한 프로필 지급 방지)
+      if (_activeIndex(s) === -1 && Array.isArray(s.profiles) && s.profiles.length > 0) return null;
+      profs = [_ensureActive(s)];
+    }
+  }
+  if (!profs.length) return null;
+
+  // 스탬프 종류: 지정(opts.type) 우선, 아니면 무작위
+  const kind = (opts.type && _KIND_BY_ID[opts.type]) ? _KIND_BY_ID[opts.type]
+    : PASSPORT_KINDS[Math.floor(Math.random() * PASSPORT_KINDS.length)];
+  const at = Date.now();
+  // 참여자 모두에게 '같은 스탬프 1개씩' (Co-op 이중 지급 방지 — 각 프로필에 정확히 1개)
+  profs.forEach((p) => {
+    if (!Array.isArray(p.passport)) p.passport = [];
+    p.passport.push({ t: kind.id, at });
+    if (p.passport.length > 400) p.passport.splice(0, p.passport.length - 400); // 무한 성장 방지
+  });
+  saveState(s); // → scheduleSync → 오프라인이면 IndexedDB 큐로 영속(비행기 모드 안전)
+  return { kind: { id: kind.id, emoji: kind.emoji, name: kind.name }, at, profileIds: profs.map((p) => p.id), coop: profs.length > 1 };
+}
+
+/** 한 프로필의 여권 스탬프 목록(획득 순). 각 항목 {type, at, emoji, name}. */
+export function getPassport(profileId) {
+  const p = _readProfile(getState(), profileId);
+  const arr = Array.isArray(p.passport) ? p.passport : [];
+  return arr.map((it) => {
+    const k = _KIND_BY_ID[it.t];
+    return { type: it.t, at: it.at, emoji: k ? k.emoji : '⭐', name: k ? k.name : '스탬프' };
+  });
+}
+/** 한 프로필이 모은 여권 스탬프 총 개수. */
+export function getPassportCount(profileId) {
+  const p = _readProfile(getState(), profileId);
+  return Array.isArray(p.passport) ? p.passport.length : 0;
 }
 /**
  * 새 프로필 생성. 기본적으로 생성 즉시 활성화(activate=true).
