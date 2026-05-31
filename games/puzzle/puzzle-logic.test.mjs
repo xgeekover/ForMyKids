@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import {
   LEVELS, LEVEL_ORDER, pieceCount, buildPieces,
-  IMAGES, CATEGORIES, imagesByCategory, imageById, snapRadius,
+  IMAGES, CATEGORIES, imagesByCategory, imageById, snapRadius, withinSnap,
 } from './puzzle-logic.js'
 
 let passed = 0
@@ -60,5 +60,21 @@ ok('명화 원격 URL / 캐릭터 로컬 경로 매핑')
 const r = snapRadius(120, 90)
 assert.ok(r > 0 && r < 90, '스냅 반경 합리적')
 ok('스냅 반경 계산')
+
+// 스냅 판정(withinSnap): 정답 근처면 true(자석 스냅), 멀면 false(트레이로 스냅백)
+{
+  const R = snapRadius(100, 100) // = 45
+  assert.equal(withinSnap(200, 200, 200, 200, R), true, '정확히 일치 → 스냅')
+  assert.equal(withinSnap(220, 200, 200, 200, R), true, '20px 차이(반경 내) → 스냅')
+  assert.equal(withinSnap(200 + R, 200, 200, 200, R), true, '경계(=반경)는 포함')
+  assert.equal(withinSnap(260, 200, 200, 200, R), false, '60px 차이(반경 밖) → 스냅백')
+  // 대각선: dx=dy=30 → 거리 42.43 ≤ 45 → 스냅
+  assert.equal(withinSnap(230, 230, 200, 200, R), true, '대각선 42.4px(반경 45 내) → 스냅')
+  // 방어: 좌표/반경이 비정상(NaN/undefined)이면 안전하게 처리(스냅백 쪽으로 보수적)
+  assert.equal(withinSnap(NaN, 0, 0, 0, R), false, 'NaN 좌표 → 스냅 안 함')
+  assert.equal(withinSnap(10, 0, 0, 0, NaN), false, 'NaN 반경 → 0 취급, 떨어져 있으면 스냅백')
+  assert.equal(withinSnap(10, 0, 0, 0, -5), false, '음수 반경은 0 으로 처리 → 불일치')
+}
+ok('스냅/스냅백 판정(withinSnap: 반경 내 스냅·경계 포함·밖/비정상 스냅백)')
 
 console.log(`\n✅ puzzle-logic 테스트 ${passed}개 통과`)

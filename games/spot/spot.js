@@ -65,6 +65,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   let lastLevel = 1;
   let diffs = [];            // 변형 스펙 배열(spot-logic)
   let foundSet = new Set();
+  let markedIds = new Set(); // 이미 마커(동그라미)를 그린 정답 id — 재터치 시 애니메이션 반복 방어
   let imgTitle = '';
   let loadedImg = null;      // 로드된 Image(실패 시 null → 폴백)
   let imgAspect = 1;         // 캔버스 종횡비(이미지 종횡비)
@@ -180,19 +181,30 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
 
   // ---------- 마커(찾음 ⭕ / 힌트 👀) — 캔버스 위 오버레이에 % 좌표로 배치 ----------
   function clearMarks() { marksA.innerHTML = ''; marksB.innerHTML = ''; }
-  function placeMark(layer, nx, ny, cls, glyph) {
-    const m = document.createElement('span');
-    m.className = 'spot-mark ' + (cls || '');
-    m.style.left = (nx * 100) + '%';
-    m.style.top = (ny * 100) + '%';
-    m.textContent = glyph;
-    m.setAttribute('aria-hidden', 'true');
-    layer.appendChild(m);
-    return m;
+  // 크레파스로 슥— 그린 듯한 동그라미: SVG 원을 stroke-dasharray 로 '그려지는' 애니메이션.
+  // (딱딱한 ⭕ 이모지 대신 따뜻한 노란/화이트 반투명 stroke + 부드러운 빛 번짐)
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function placeMark(layer, nx, ny, cls) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'spot-mark ' + (cls || '')); // SVG 는 className 직접대입 불가 → setAttribute
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.style.left = (nx * 100) + '%';
+    svg.style.top = (ny * 100) + '%';
+    const ring = document.createElementNS(SVG_NS, 'circle');
+    ring.setAttribute('class', 'spot-ring');
+    ring.setAttribute('cx', '50');
+    ring.setAttribute('cy', '50');
+    ring.setAttribute('r', '38'); // 둘레 ≈ 239 → CSS stroke-dasharray/offset 239
+    svg.appendChild(ring);
+    layer.appendChild(svg);
+    return svg;
   }
   function markFound(d) {
-    placeMark(marksA, d.cx, d.cy, 'is-found', '⭕');
-    placeMark(marksB, d.cx, d.cy, 'is-found', '⭕');
+    if (markedIds.has(d.id)) return; // 이미 그린 정답이면 마커/애니메이션을 다시 만들지 않음(반복 방어)
+    markedIds.add(d.id);
+    placeMark(marksA, d.cx, d.cy, 'is-found');
+    placeMark(marksB, d.cx, d.cy, 'is-found');
   }
 
   // ---------- 입력(두 그림 어디든 탭) ----------
@@ -228,13 +240,24 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     stage.classList.remove('is-wrong');
     void stage.offsetWidth;
     stage.classList.add('is-wrong');
-    // 자식 마커(.spot-mark mark-pop)의 animationend 가 버블링되어 흔들림을 일찍 끊지 않도록 가드
-    const clear = (ev) => {
-      if (ev.target !== stage || ev.animationName !== 'stage-shake') return;
+    // 모션 줄이기면 stage-shake 가 안 돌아 animationend 가 안 옴 → 리스너 누적 방지: 즉시 해제하고 끝.
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
       stage.classList.remove('is-wrong');
       stage.removeEventListener('animationend', clear);
+      clearTimeout(timer);
     };
+    const clear = (ev) => {
+      // 자식 마커(.spot-ring)의 animationend 가 버블링되어 흔들림을 일찍 끊지 않도록 가드
+      if (ev.target !== stage || ev.animationName !== 'stage-shake') return;
+      finish();
+    };
+    let reduce = false;
+    try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    if (reduce) { stage.classList.remove('is-wrong'); return; } // 애니메이션 없음 → 리스너 달지 않음
     stage.addEventListener('animationend', clear);
+    const timer = setTimeout(finish, 600); // animationend 누락 대비 안전 폴백(리스너 확실히 정리)
   }
 
   // ---------- 힌트 ----------
@@ -245,8 +268,8 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     hintUsed = true;
     btnHint.classList.add('is-used');
     const d = choice(remaining);
-    const m1 = placeMark(marksA, d.cx, d.cy, 'is-hint', '👀');
-    const m2 = placeMark(marksB, d.cx, d.cy, 'is-hint', '👀');
+    const m1 = placeMark(marksA, d.cx, d.cy, 'is-hint');
+    const m2 = placeMark(marksB, d.cx, d.cy, 'is-hint');
     showToast('여기 근처를 잘 봐! 💡', 'hint');
     window.setTimeout(() => { m1.remove(); m2.remove(); }, 2200);
   }
@@ -304,6 +327,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     timeLeft = diff.time;
     btnHint.classList.remove('is-used');
     foundSet = new Set();
+    markedIds = new Set(); // 새 라운드 → 마커 그림 기록 초기화
     clearMarks();
 
     const spec = pickSpotImage();

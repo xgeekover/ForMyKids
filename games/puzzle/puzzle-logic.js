@@ -116,3 +116,11 @@ export function buildPieces(cols, rows) {
 export function snapRadius(pieceW, pieceH) {
   return Math.min(pieceW, pieceH) * 0.45;
 }
+
+// 스냅 판정: 현재 위치(px,py)가 정답 슬롯(gx,gy)에서 radius 이내인가?
+// true → '착!' 자석 스냅, false → 트레이로 스냅백. (드래그 종료 로직·테스트 공용 순수 함수)
+export function withinSnap(px, py, gx, gy, radius) {
+  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(gx) || !Number.isFinite(gy)) return false;
+  const r = Number.isFinite(radius) ? Math.max(0, radius) : 0;
+  return Math.hypot(px - gx, py - gy) <= r;
+}

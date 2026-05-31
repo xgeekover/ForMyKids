@@ -14,7 +14,7 @@ import { cheerActive } from '../../shared/fmk-audio.js' // 클리어 시 아이 
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import { installGameGuard } from '../../shared/fmk-screentime.js'
 import * as sfx from '../../shared/fmk-sound.js'
-import { LEVELS, LEVEL_ORDER, CATEGORIES, IMAGES, imagesByCategory, imageById, buildPieces, snapRadius } from './puzzle-logic.js'
+import { LEVELS, LEVEL_ORDER, CATEGORIES, IMAGES, imagesByCategory, imageById, buildPieces, snapRadius, withinSnap } from './puzzle-logic.js'
 import { getCustomPuzzleId } from '../../shared/fmk-store.js'
 import { loadPhoto } from '../../shared/fmk-photos.js'
 
@@ -334,7 +334,11 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
 
   function clearPieces() {
     drags.clear(); // 진행 중 드래그가 있었어도 정리
-    for (const p of pieces) { if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el); }
+    // 진행 중 스냅/스냅백 애니메이션의 리스너·타이머까지 정리(메모리 누수 방지) 후 DOM 제거
+    for (const p of pieces) {
+      cancelAnim(p);
+      if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el);
+    }
     pieces = [];
     boardSlots.innerHTML = '';
   }
@@ -396,6 +400,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
       x = clamp(x, 4, W - layout.pieceW - 4);
       y = clamp(y, 4, H - layout.pieceH - 4);
       placeFree(p, x, y);
+      p.homeX = x; p.homeY = y; // 스냅백(오답)할 때 돌아갈 트레이 자리 기억
     });
   }
 
@@ -416,6 +421,31 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   function placeFree(p, x, y) {
     p.x = x; p.y = y;
     p.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+  }
+
+  // ---------- 놓은 뒤 부드러운 이동(스냅/스냅백) — CSS transition + transitionend ----------
+  // 진행 중 애니메이션 정리(리스너/타이머/클래스 제거). runDone=true 면 완료 콜백도 실행.
+  function clearAnim(p, runDone) {
+    const a = p && p._anim;
+    if (!a) return;
+    p._anim = null;
+    p.el.removeEventListener('transitionend', a.onEnd);
+    if (a.timer) clearTimeout(a.timer);
+    p.el.classList.remove(a.cls);
+    if (runDone && a.onDone) { try { a.onDone(); } catch (e) {} }
+  }
+  function cancelAnim(p) { clearAnim(p, false); } // 다시 잡기/정리 시: 완료 콜백 없이 중단
+  // cls(.snap-in/.snap-back) 트랜지션을 켜고 목표로 이동. transform 트랜지션 종료 시 onDone.
+  function animateTo(p, x, y, cls, onDone) {
+    if (!p || !p.el) return;
+    cancelAnim(p); // 중복 애니메이션 방지
+    const onEnd = (ev) => { if (ev.target === p.el && ev.propertyName === 'transform') clearAnim(p, true); };
+    p._anim = { cls, onDone, onEnd, timer: 0 };
+    p.el.classList.add(cls);
+    placeFree(p, x, y); // transform 변경 → 트랜지션 시작(p.x/p.y 도 목표로 갱신)
+    p.el.addEventListener('transitionend', onEnd);
+    // transitionend 누락(중단/모션 줄이기) 대비 안전 폴백 — 항상 정리되어 리스너 누수 방지
+    p._anim.timer = setTimeout(() => clearAnim(p, true), 700);
   }
 
   // ---------- 보드 레이아웃(반응형) ----------
@@ -471,6 +501,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   function onPointerDown(e, p) {
     if (state !== 'playing' || p.placed || p._dragging) return; // 한 조각은 한 포인터만
     e.preventDefault();
+    cancelAnim(p); // 스냅백 애니메이션 중 다시 잡으면 즉시 중단하고 깨끗하게 드래그 시작
     if (startedAt === 0) { startedAt = performance.now(); startTimer(); } // 첫 드래그에 타이머 시작
     try { p.el.setPointerCapture(e.pointerId); } catch (_) {}
     topZ += 1;
@@ -502,9 +533,21 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     drags.delete(e.pointerId);
 
     const goal = slotXY(p);
-    if (Math.hypot(p.x - goal.x, p.y - goal.y) <= snapRadius(layout.pieceW, layout.pieceH)) {
-      snapPiece(p, goal);
+    if (withinSnap(p.x, p.y, goal.x, goal.y, snapRadius(layout.pieceW, layout.pieceH))) {
+      snapPiece(p, goal);       // 정답 근처 → 자석처럼 '착!' 빨려 들어감
+    } else {
+      snapBack(p);              // 엉뚱한 곳 → 트레이로 탄력 있게 되돌아감
     }
+  }
+
+  // 오답: 원래 트레이 자리로 부드럽게(스프링) 복귀 + '띡'
+  function snapBack(p) {
+    sfx.wrong();
+    const W = window.innerWidth, H = window.innerHeight;
+    // 항상 현재 화면 안쪽으로 복귀(옛 home 이 화면 밖이어도 다시 못 잡는 일이 없도록 클램프)
+    const hx = clamp(Number.isFinite(p.homeX) ? p.homeX : p.x, 4, W - layout.pieceW - 4);
+    const hy = clamp(Number.isFinite(p.homeY) ? p.homeY : p.y, 4, H - layout.pieceH - 4);
+    animateTo(p, hx, hy, 'snap-back');
   }
 
   function onPointerCancel(e) {
@@ -524,13 +567,18 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
   }
 
   function snapPiece(p, goal) {
-    p.placed = true;
-    placeFree(p, goal.x, goal.y);
-    p.el.classList.add('is-placed');
-    p.el.classList.add('snap-pop');
-    p.el.style.zIndex = '1'; // 맞춰진 조각은 뒤로
-    sfx.pop();
-    setTimeout(() => p.el && p.el.classList.remove('snap-pop'), 320);
+    p.placed = true;            // 로직상 즉시 배치(중복 드래그/재잡기 방지)
+    sfx.correct();              // 정답 → '띠링'
+    // 자석처럼 정위치로 빨려 들어간 뒤(transition), 도착하면 '착!' 팝 + 배치 스타일 적용
+    animateTo(p, goal.x, goal.y, 'snap-in', () => {
+      if (!p.el) return;
+      p.el.classList.add('is-placed');
+      p.el.style.zIndex = '1'; // 맞춰진 조각은 뒤로
+      // 팝 애니메이션이 위치(translate)를 유지한 채 scale 만 튀도록 현재 좌표를 넘겨준다
+      p.el.style.setProperty('--snap-from', 'translate(' + goal.x + 'px,' + goal.y + 'px)');
+      p.el.classList.add('snap-pop');
+      setTimeout(() => p.el && p.el.classList.remove('snap-pop'), 320);
+    });
 
     placedCount++;
     updateHud();
@@ -651,7 +699,6 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
       if (state === 'playing') computeLayout();
       return;
     }
-    const prev = { boardX: layout.boardX, boardY: layout.boardY, boardW: layout.boardW, boardH: layout.boardH, pieceW: layout.pieceW, pieceH: layout.pieceH };
     const W = window.innerWidth, H = window.innerHeight;
 
     // 미배치 조각의 현재 위치를 화면 비율로 기록(재배치 기준)
@@ -686,6 +733,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
         let x = clamp(rr.rx * W, 4, W - layout.pieceW - 4);
         let y = clamp(rr.ry * H, 4, H - layout.pieceH - 4);
         placeFree(p, x, y);
+        p.homeX = x; p.homeY = y; // 회전/리사이즈 후 스냅백이 옛 좌표(화면 밖)로 날아가지 않도록 갱신
       }
     });
   }

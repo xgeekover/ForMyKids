@@ -160,31 +160,48 @@
   80% { transform: translateX(5px); }
 }
 
-/* ---------- 찾은 곳(⭕) / 힌트(👀) 마커 — 패널 % 좌표에 절대 배치 ---------- */
+/* ---------- 찾은 곳 / 힌트 마커 — 패널 % 좌표에 절대 배치한 SVG 동그라미 ----------
+   크레파스로 슥 그린 듯 stroke-dasharray 로 '그려지는' 따뜻한 노란 원 + 부드러운 빛 번짐.
+   그림 위에 얹히는 표시라 그림 분위기를 해치지 않도록 반투명·둥근 선·은은한 글로우만 사용. */
 .spot-mark {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  font-size: clamp(1.8rem, 9vw, 3rem);
+  width: clamp(58px, 17vw, 96px);
+  height: clamp(58px, 17vw, 96px);
+  overflow: visible;
   z-index: 3;
 }
-.spot-mark.is-found {
-  color: #ff5d5d;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-  animation: mark-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.7);
+.spot-mark .spot-ring {
+  fill: none;
+  stroke: rgba(255, 225, 130, 0.95);   /* 따뜻한 노란색, 반투명 */
+  stroke-width: 7;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgba(255, 235, 150, 0.9))
+          drop-shadow(0 0 2px rgba(255, 255, 255, 0.85));
 }
-@keyframes mark-pop {
-  0% { transform: translate(-50%, -50%) scale(0.1) rotate(-30deg); opacity: 0; }
-  60% { transform: translate(-50%, -50%) scale(1.25) rotate(8deg); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+/* 찾은 곳: 한 번에 슥— 그려지고(0.55s) 동시에 부드러운 빛이 번졌다 가라앉음 */
+.spot-mark.is-found .spot-ring {
+  stroke-dasharray: 239;               /* 2πr, r=38 */
+  stroke-dashoffset: 239;
+  animation: spot-draw 0.55s cubic-bezier(0.4, 0.1, 0.25, 1) forwards,
+             spot-glow 0.9s ease-out 0.08s;
 }
-.spot-mark.is-hint {
-  filter: drop-shadow(0 0 8px rgba(255, 200, 60, 0.95));
-  animation: mark-hint 0.6s ease-in-out infinite;
+@keyframes spot-draw { to { stroke-dashoffset: 0; } }
+@keyframes spot-glow {
+  0%   { filter: drop-shadow(0 0 0   rgba(255, 235, 150, 0)); }
+  40%  { filter: drop-shadow(0 0 16px rgba(255, 235, 150, 0.95)) drop-shadow(0 0 5px rgba(255, 255, 255, 0.9)); }
+  100% { filter: drop-shadow(0 0 5px rgba(255, 235, 150, 0.85)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.85)); }
 }
-@keyframes mark-hint {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
-  50% { transform: translate(-50%, -50%) scale(1.28); opacity: 1; }
+/* 힌트: 부드러운 화이트빛 원이 은은하게 맥동(여기 근처를 봐!) */
+.spot-mark.is-hint .spot-ring {
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-dasharray: 10 12;             /* 점선 → 손그림 느낌 */
+  animation: spot-hint 1s ease-in-out infinite;
+}
+@keyframes spot-hint {
+  0%, 100% { opacity: 0.6; transform: scale(0.96); transform-origin: 50% 50%; }
+  50%      { opacity: 1;   transform: scale(1.06); transform-origin: 50% 50%; }
 }
 
 /* ---------- 토스트(콤보/격려) ---------- */
@@ -439,12 +456,12 @@
   #timePill.is-low,
   .screen-card,
   .new-achieves,
-  .spot-mark.is-found,
-  .spot-mark.is-hint,
   .spot-toast.is-show,
   .spot-stage.is-wrong {
     animation: none !important;
   }
+  /* 마커: 모션 줄이기여도 동그라미는 '보여야' 하므로 그리기 애니메이션 대신 완성 상태로 표시 */
+  .spot-mark .spot-ring { animation: none !important; stroke-dashoffset: 0 !important; }
   .spot-toast.is-show { opacity: 1; transform: translate(-50%, -60%) scale(1); }
   .fmk-btn, .diff-btn, .hud-pill--hint { transition-duration: 0.01ms; }
 }
