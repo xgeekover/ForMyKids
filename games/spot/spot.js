@@ -10,6 +10,7 @@
    =================================================================== */
 import { recordPlay, getGameStats } from '../../shared/fmk-store.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
+import { cheerActive } from '../../shared/fmk-audio.js' // 클리어 시 아이 이름 부르며 칭찬(TTS)
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import { installGameGuard } from '../../shared/fmk-screentime.js'
 import { DIFFS, buildDifferences, hitTest, pickSpotImage } from './spot-logic.js'
@@ -360,6 +361,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
     overMsg.innerHTML = '대단한 눈썰미야! 🔍✨';
     showResult(score, res && res.newlyUnlocked);
     celebrate(); // 성공! 화면 전체 폭죽 — 시간초과(timeUp)에는 호출하지 않음
+    cheerActive(); // "OO 짱이야!" 음성 칭찬(음소거/미지원 시 무시)
   }
 
   function timeUp() {

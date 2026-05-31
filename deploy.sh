@@ -80,6 +80,8 @@ fi
 echo "📁 [2/4] 원격 폴더 준비 + compose 전송"
 $SSH "$REMOTE" "mkdir -p $REMOTE_DIR"
 $SCP docker-compose.yml "$REMOTE:$REMOTE_DIR/docker-compose.yml"
+# DB 백업 스크립트도 함께 전송(서버에서 cron 등록용 — .env 와 같은 폴더에 위치)
+if [ -f backup-db.sh ]; then $SCP backup-db.sh "$REMOTE:$REMOTE_DIR/backup-db.sh"; fi
 # 로컬에 .env 가 있으면 함께 전송(없으면 compose 기본값 사용 — 비밀은 서버 .env 권장)
 if [ -f .env ]; then $SCP .env "$REMOTE:$REMOTE_DIR/.env"; fi
 

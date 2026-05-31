@@ -41,6 +41,7 @@ import { compressImage, savePhoto, deletePhoto, loadPhoto } from '../../shared/f
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import * as sfx from '../../shared/fmk-sound.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
+import { cheerActive } from '../../shared/fmk-audio.js' // 새 도장 확인 시 아이 이름 부르며 칭찬(TTS)
 
 installCrashGuard({ homeHref: 'index.html', isLauncher: true }) // 런처는 새로고침으로 복구
 registerServiceWorker('sw.js')                                  // 오프라인 캐싱(운영 빌드)
@@ -472,6 +473,8 @@ function openAchModal() {
   // 모션 줄이기 설정이면 폭죽 DOM 자체를 만들지 않음(애니메이션도 어차피 꺼짐)
   if (newItems.length && !prefersReducedMotion()) spawnConfetti($('achConfetti'))
   if (newItems.length) celebrate() // 새 칭찬 도장이 있으면 화면 전체 폭죽(reduced-motion 은 함수 내부에서 처리)
+  if (newItems.length) { sfx.resume(); sfx.fanfare(); cheerActive() } // 도장 받음 → 팡파레 + 이름 부르며 칭찬
+
   markAchievementsViewed() // 본 것으로 표시 → 다음부터는 연출 안 함
   renderReport() // 성적표 배지의 새 도장 표시 갱신
 }

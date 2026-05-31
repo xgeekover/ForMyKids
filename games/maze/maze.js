@@ -10,6 +10,7 @@
    =================================================================== */
 import { recordPlay } from '../../shared/fmk-store.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
+import { cheerActive } from '../../shared/fmk-audio.js' // 클리어 시 아이 이름 부르며 칭찬(TTS)
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import { installGameGuard } from '../../shared/fmk-screentime.js'
 import { N, E, S, W, DX, DY, LEVELS, buildMaze, placeStars } from './maze-logic.js'
@@ -227,6 +228,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
 
     confetti();
     celebrate(); // 미로 탈출 성공! 화면 전체 폭죽
+    cheerActive(); // "OO 정말 잘했어!" 음성 칭찬(음소거/미지원 시 무시)
     hud.classList.add('is-hidden'); hud.setAttribute('aria-hidden', 'true');
     dpad.classList.add('is-hidden'); dpad.setAttribute('aria-hidden', 'true');
     winScreen.classList.add('is-open');

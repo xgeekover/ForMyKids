@@ -10,6 +10,7 @@
    =================================================================== */
 import { recordPlay, getGameStats } from '../../shared/fmk-store.js'
 import { celebrate } from '../../shared/fmk-confetti.js'
+import { cheerActive } from '../../shared/fmk-audio.js' // 클리어 시 아이 이름 부르며 칭찬(TTS)
 import { installCrashGuard, registerServiceWorker } from '../../shared/fmk-guard.js'
 import { installGameGuard } from '../../shared/fmk-screentime.js'
 import * as sfx from '../../shared/fmk-sound.js'
@@ -587,6 +588,7 @@ installGameGuard({ homeHref: '../../index.html' })  // 스크린 타임: 초과 
 
     confettiBurst();
     celebrate(); // 퍼즐 완성! 화면 전체 폭죽으로 확실한 시각 보상
+    cheerActive(); // "멋지다, OO!" 음성 칭찬(음소거/미지원 시 무시)
     hud.classList.add('is-hidden'); hud.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
       playfield.classList.add('is-hidden'); playfield.setAttribute('aria-hidden', 'true');
